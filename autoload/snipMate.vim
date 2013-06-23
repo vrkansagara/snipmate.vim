@@ -716,7 +716,7 @@ endf
 
 fun! snipMate#GetSnippetsForWordBelowCursorForComplete(word)
 	let snippets = map(snipMate#GetSnippetsForWordBelowCursor(a:word, '*', 0), 'v:val[0]')
-	return filter(snippets, "v:val =~# '\\V\\^" . escape(a:word, '\') . "'")
+	return filter(snippets, 'v:val =~# "\\V\\^' . escape(a:word, '"\') . '"')
 endf
 
 fun! snipMate#CanBeTriggered()
