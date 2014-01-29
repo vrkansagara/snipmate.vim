@@ -13,13 +13,6 @@ endtry
 " match $ which doesn't follow a \
 let s:d = '\%([\\]\@<!\$\)'
 
-
-" disable write cache in files
-" some people get errors about writing the cache files. Probably there is no
-" pay off having slow disks anyway. So disabling the cache by default
-let s:c.cache_parsed_snippets_on_disk = get(s:c, 'cache_parsed_snippets_on_disk', 0)
-let s:c.read_snippets_cached = get(s:c, 'read_snippets_cached', {'func' : function('snipMate#ReadSnippetsFile'), 'version': 3, 'use_file_cache': s:c.cache_parsed_snippets_on_disk})
-
 " if filetype is objc, cpp, cs or cu also append snippets from scope 'c'
 " you can add multiple by separating scopes by ',', see s:AddScopeAliases
 let s:c.scope_aliases = get(s:c, 'scope_aliases', {})
@@ -47,6 +40,7 @@ fun! Filename(...)
 endf
 
 let s:state_proto = {}
+let s:cache = {}
 
 fun! s:state_proto.remove()
 	unlet! b:snip_state
@@ -392,16 +386,6 @@ function! s:state_proto.update_vars(change)
 	endif
 endfunction
 
-" should be moved to utils or such?
-fun! snipMate#SetByPath(dict, path, value)
-	let d = a:dict
-	for p in a:path[:-2]
-		if !has_key(d,p) | let d[p] = {} | endif
-		let d = d[p]
-	endfor
-	let d[a:path[-1]] = a:value
-endf
-
 " reads a .snippets file
 " returns list of
 " ['triggername', 'name', 'contents']
@@ -528,7 +512,7 @@ function! snipMate#GetSnippetFiles(mustExist, scopes, trigger)
 endfunction
 
 fun! snipMate#EvalGuard(guard)
-	" left: everything left of expansion 
+	" left: everything left of expansion
 	" word: the expanded word
 	" are guaranteed to be in scpe
 
@@ -539,31 +523,62 @@ fun! snipMate#EvalGuard(guard)
 	exec 'return '.a:guard
 endf
 
+" should be moved to utils or such?
+function! snipMate#SetByPath(dict, path, value)
+	let d = a:dict
+	for p in a:path[:-2]
+		if !has_key(d,p) | let d[p] = {} | endif
+		let d = d[p]
+	endfor
+	let d[a:path[-1]] = a:value
+endfunction
+
+function! s:ReadFile(file)
+	if a:file =~ '\.snippet$'
+		return [['', '', readfile(a:file), '1'], []]
+	else
+		return snipMate#ReadSnippetsFile(a:file)
+	endif
+endfunction
+
+function! s:CachedSnips(file)
+	let mtime = getftime(a:file)
+	if has_key(s:cache, a:file) && s:cache[a:file].mtime >= mtime
+		return s:cache[a:file].contents
+	endif
+	let s:cache[a:file] = {}
+	let s:cache[a:file].mtime = mtime
+	let s:cache[a:file].contents = snipMate#ReadSnippetsFile(a:file)
+	return s:cache[a:file].contents
+endfunction
+
 " default triggers based on paths
-fun! snipMate#DefaultPool(scopes, trigger, result)
-	let triggerR = substitute(a:trigger,'*','.*','g')
+function! snipMate#DefaultPool(scopes, trigger, result)
 	let extra_scopes = []
 	for [f,opts] in items(snipMate#GetSnippetFiles(1, a:scopes, a:trigger))
-		let opts.name_prefix = matchstr(f, '\v[^/]+\ze/snippets') . ' ' . opts.name_prefix
+		let opts.name_prefix = matchstr(f, '\v/\zs.{-}\ze/snippets') . ' ' . opts.name_prefix
 		if opts.type == 'snippets'
-			let [snippets, extension] = cached_file_contents#CachedFileContents(f, s:c.read_snippets_cached, 0)
+			let [snippets, new_scopes] = s:CachedSnips(f)
+			call extend(extra_scopes, new_scopes)
 			for [trigger, name, contents, guard] in snippets
-				if trigger !~ escape(triggerR,'~') | continue | endif
-				if snipMate#EvalGuard(guard)
-					call snipMate#SetByPath(a:result, [trigger, opts.name_prefix.' '.name], contents)
+				if trigger =~ '\V\^' . escape(a:trigger, '\')
+							\ && snipMate#EvalGuard(guard)
+					call snipMate#SetByPath(a:result,
+								\ [trigger, opts.name_prefix . ' ' . name],
+								\ contents)
 				endif
 			endfor
-			call extend(extra_scopes, extension)
 		elseif opts.type == 'snippet'
-			call snipMate#SetByPath(a:result, [opts.trigger, opts.name_prefix.' '.opts.name], funcref#Function('return readfile('.string(f).')'))
+			call snipMate#SetByPath(a:result, [opts.trigger, opts.name_prefix.' '.opts.name], readfile(f))
 		else
 			throw "unexpected"
 		endif
 	endfor
+
 	if !empty(extra_scopes)
 		call snipMate#DefaultPool(extra_scopes, a:trigger, a:result)
 	endif
-endf
+endfunction
 
 " return a dict of snippets found in runtimepath matching trigger
 " scopes: list of scopes. usually this is the filetype. eg ['c','cpp']
@@ -571,8 +586,6 @@ endf
 "
 fun! snipMate#GetSnippets(scopes, trigger)
 	let result = {}
-	let triggerR = escape(substitute(a:trigger,'*','.*','g'), '~') " escape '~' for use as regexp
-	" let scopes = s:AddScopeAliases(a:scopes)
 
 	for F in values(g:snipMateSources)
 	  call funcref#Call(F, [a:scopes, a:trigger, result])
@@ -666,14 +679,12 @@ fun! snipMate#GetSnippetsForWordBelowCursor(word, suffix, break_on_first_match)
 	endif
 
 	call filter(lookups, 'v:val != ""')
-	" echo lookups
 
 	let matching_snippets = []
 	let snippet = ''
 	" prefer longest word
 	for word in lookups
 		let s:c.word = word
-		" echomsg string(lookups).' current: '.word
 		for [k,snippetD] in items(funcref#Call(s:c['get_snippets'], [snipMate#ScopesByFile(), word]))
 			if a:suffix == ''
 				" hack: require exact match
