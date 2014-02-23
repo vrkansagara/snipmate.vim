@@ -257,7 +257,7 @@ function! s:state_proto.jump_stop(backwards)
 
 	if self.stop_no == self.stop_count
 		call self.remove()
-		return -1
+		return ''
 	endif
 
 	call self.set_stop(self.stop_no)
@@ -297,6 +297,10 @@ function! s:state_proto.update_stops()
 			if exists('pos[3]')
 				for nPos in pos[3]
 					let changed = nPos[0] == curLine && nPos[1] > self.start_col
+					if changed && nPos[1] < self.start_col + self.cur_stop[2]
+						call remove(pos, index(pos, nPos))
+						continue
+					endif
 					for [lnum, col] in self.old_vars
 						if lnum > nPos[0] | break | endif
 						if nPos[0] == lnum && nPos[1] > col
