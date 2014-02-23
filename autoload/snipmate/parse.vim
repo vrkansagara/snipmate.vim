@@ -48,7 +48,7 @@ function! snipmate#parse#snippet(text)
         if cur_state == 'expr' && tok_type == 'expr'
             call state_stack.pop()
             let str = join(target_stack.pop(), '')
-            call add(target_stack.top(), eval(str))
+            call add(target_stack.top(), string(eval(str)))
         elseif cur_state == 'mirror' && tok_type == 'id'
             call add(cur_target, +tok_val)
             call add(cur_contain, +tok_val)
