@@ -85,7 +85,7 @@ fun! snipMate#expandSnip(snip, col)
 
 	if b:snip_state.stop_count
 		aug snipmate_changes
-			au CursorMovedI,InsertEnter <buffer> call b:snip_state.update_changes()
+			au CursorMoved,CursorMovedI <buffer> call b:snip_state.update_changes()
 		aug END
 		call b:snip_state.set_stop(0)
 
@@ -385,7 +385,7 @@ function! s:state_proto.update_vars(change)
 
 	" Reposition the cursor in case a var updates on the same line but before
 	" the current tabstop
-	if oldStartSnip != self.start_col
+	if oldStartSnip != self.start_col || mode() == 'i'
 		call cursor(0, col('.') + self.start_col - oldStartSnip)
 	endif
 endfunction
