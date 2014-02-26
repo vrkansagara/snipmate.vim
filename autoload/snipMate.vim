@@ -524,6 +524,12 @@ fun! snipMate#EvalGuard(guard)
 	let word = s:c.word
 	" eval is evil, but backticks are allowed anyway.
 	let left = getline('.')[:col('.')-3 - len(word)]
+	" docs use left_from_cursor, looks like this never got fixed in time,
+	" thus now left and left_from_cursor can be used for backward
+	" compatibility
+	" Looks like nobody ever used this feature - so maybe we should just drop
+	" it
+	let left_from_cursor = left
 	exec 'return '.a:guard
 endf
 
