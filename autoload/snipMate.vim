@@ -398,27 +398,18 @@ fun! snipMate#ReadSnippetsFile(file)
 	let result = []
 	let new_scopes = []
 	if !filereadable(a:file) | return [result, new_scopes] | endif
-	let r_guard = '^guard\s\+\zs.*'
 	let inSnip = 0
-	let guard = 1
 	for line in readfile(a:file) + ["\n"]
-		if inSnip == 2 && line =~ r_guard
-			let guard = matchstr(line, r_guard)
-		elseif inSnip && (line[0] == "\t" || line == '')
+		if inSnip && (line[0] == "\t" || line == '')
 			let content .= strpart(line, 1)."\n"
 			continue
 		elseif inSnip
-			call add(result, [trigger, name == '' ? 'default' : name, content[:-2], guard])
+			call add(result, [trigger, name == '' ? 'default' : name, content[:-2]])
 			let inSnip = 0
-			let guard = "1"
 		endif
 
-		if inSnip == 2
-			let inSnip = 1
-		endif
 		if line[:6] == 'snippet'
-			" 2 signals first line
-			let inSnip = 2
+			let inSnip = 1
 			let trigger = strpart(line, 8)
 			let name = ''
 			let space = stridx(trigger, ' ') + 1
@@ -515,24 +506,6 @@ function! snipMate#GetSnippetFiles(mustExist, scopes, trigger)
 	return result
 endfunction
 
-fun! snipMate#EvalGuard(guard)
-	" left: everything left of expansion
-	" word: the expanded word
-	" are guaranteed to be in scpe
-
-	if a:guard == '1' | return 1 | endif
-	let word = s:c.word
-	" eval is evil, but backticks are allowed anyway.
-	let left = getline('.')[:col('.')-3 - len(word)]
-	" docs use left_from_cursor, looks like this never got fixed in time,
-	" thus now left and left_from_cursor can be used for backward
-	" compatibility
-	" Looks like nobody ever used this feature - so maybe we should just drop
-	" it
-	let left_from_cursor = left
-	exec 'return '.a:guard
-endf
-
 " should be moved to utils or such?
 function! snipMate#SetByPath(dict, path, value)
 	let d = a:dict
@@ -545,7 +518,7 @@ endfunction
 
 function! s:ReadFile(file)
 	if a:file =~ '\.snippet$'
-		return [['', '', readfile(a:file), '1'], []]
+		return [['', '', readfile(a:file), '1']]
 	else
 		return snipMate#ReadSnippetsFile(a:file)
 	endif
@@ -570,9 +543,8 @@ function! snipMate#DefaultPool(scopes, trigger, result)
 		if opts.type == 'snippets'
 			let [snippets, new_scopes] = s:CachedSnips(f)
 			call extend(extra_scopes, new_scopes)
-			for [trigger, name, contents, guard] in snippets
+			for [trigger, name, contents] in snippets
 				if trigger =~ '\V\^' . escape(a:trigger, '\')
-							\ && snipMate#EvalGuard(guard)
 					call snipMate#SetByPath(a:result,
 								\ [trigger, opts.name_prefix . ' ' . name],
 								\ contents)

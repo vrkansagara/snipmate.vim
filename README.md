@@ -49,6 +49,7 @@ looking at the [vim-snippets][vim-snippets] repository.
 ### Master ###
 
 * Implement simple caching
+* Remove expansion guards
 
 * Fix bug with mirrors in the first column
 * Fix bug with tabs in indents ([#143][143])
