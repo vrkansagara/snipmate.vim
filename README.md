@@ -50,7 +50,6 @@ looking at the [vim-snippets][vim-snippets] repository.
 
 * Implement simple caching
 * Remove expansion guards
-
 * Fix bug with mirrors in the first column
 * Fix bug with tabs in indents ([#143][143])
 * Fix bug with mirrors in placeholders
