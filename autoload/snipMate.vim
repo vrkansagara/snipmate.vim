@@ -522,14 +522,6 @@ function! snipMate#SetByPath(dict, trigger, path, snippet)
 	let d[a:trigger][a:path] = a:snippet
 endfunction
 
-function! s:ReadFile(file)
-	if a:file =~ '\.snippet$'
-		return [['', '', readfile(a:file), '1']]
-	else
-		return snipMate#ReadSnippetsFile(a:file)
-	endif
-endfunction
-
 function! s:CachedSnips(file)
 	let mtime = getftime(a:file)
 	if has_key(s:cache, a:file) && s:cache[a:file].mtime >= mtime
