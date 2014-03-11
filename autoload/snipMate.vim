@@ -447,16 +447,22 @@ fun! s:AddScopeAliases(list)
   return keys(did)
 endf
 
-function! s:Glob(path, expr)
-	let res = []
-	for p in split(a:path, ',')
-		let h = fnamemodify(a:expr, ':h')
-		if isdirectory(p . '/' . h)
-			call extend(res, split(glob(p . '/' . a:expr), "\n"))
-		endif
-	endfor
-	return filter(res, 'filereadable(v:val)')
-endfunction
+if v:version >= 704
+	function! s:Glob(path, expr)
+		return split(globpath(a:path, a:expr), "\n")
+	endfunction
+else
+	function! s:Glob(path, expr)
+		let res = []
+		for p in split(a:path, ',')
+			let h = split(fnamemodify(a:expr, ':h'), '/')[0]
+			if isdirectory(p . '/' . h)
+				call extend(res, split(glob(p . '/' . a:expr), "\n"))
+			endif
+		endfor
+		return filter(res, 'filereadable(v:val)')
+	endfunction
+endif
 
 " returns dict of
 " { path: { 'type': one of 'snippet' 'snippets',
@@ -466,7 +472,6 @@ endfunction
 "           'trigger': trigger of snippet
 "         }
 " }
-" use trigger = '*' to match all snippet files
 " use mustExist = 1 to return existing files only
 "
 "     mustExist = 0 is used by OpenSnippetFiles
@@ -485,14 +490,16 @@ function! snipMate#GetSnippetFiles(mustExist, scopes, trigger)
 						\ 'name_prefix' : fnamemodify(f, ':t:r') }
 		endfor
 
-		for f in s:Glob(paths, 'snippets/'.scope.'/'.trigger.'.snippet')
+		" We check for trigger* in the next two loops. In the case of an exact
+		" match, that'll be handled in snipMate#GetSnippetsForWordBelowCursor.
+		for f in s:Glob(paths, 'snippets/' . scope . '/' . trigger . '*.snippet')
 			let result[f] = {'exists': 1, 'type': 'snippet', 'name': 'default',
-						\ 'trigger': a:trigger, 'name_prefix' : scope }
+						\ 'trigger': fnamemodify(f, ':t:r'), 'name_prefix' : scope }
 		endfor
 
-		for f in s:Glob(paths, 'snippets/'.scope.'/'.trigger.'/*.snippet')
+		for f in s:Glob(paths, 'snippets/' . scope . '/' . trigger . '*/*.snippet')
 			let result[f] = {'exists': 1, 'type': 'snippet', 'name' : fnamemodify(f, ':t:r'),
-						\ 'trigger': a:trigger, 'name_prefix' : scope }
+						\ 'trigger': fnamemodify(f, ':h:t'), 'name_prefix' : scope }
 		endfor
 
 		if !a:mustExist
@@ -507,13 +514,12 @@ function! snipMate#GetSnippetFiles(mustExist, scopes, trigger)
 endfunction
 
 " should be moved to utils or such?
-function! snipMate#SetByPath(dict, path, value)
+function! snipMate#SetByPath(dict, trigger, path, snippet)
 	let d = a:dict
-	for p in a:path[:-2]
-		if !has_key(d,p) | let d[p] = {} | endif
-		let d = d[p]
-	endfor
-	let d[a:path[-1]] = a:value
+	if !has_key(d, a:trigger)
+		let d[a:trigger] = {}
+	endif
+	let d[a:trigger][a:path] = a:snippet
 endfunction
 
 function! s:ReadFile(file)
@@ -545,13 +551,13 @@ function! snipMate#DefaultPool(scopes, trigger, result)
 			call extend(extra_scopes, new_scopes)
 			for [trigger, name, contents] in snippets
 				if trigger =~ '\V\^' . escape(a:trigger, '\')
-					call snipMate#SetByPath(a:result,
-								\ [trigger, opts.name_prefix . ' ' . name],
-								\ contents)
+					call snipMate#SetByPath(a:result, trigger,
+								\ opts.name_prefix . ' ' . name, contents)
 				endif
 			endfor
 		elseif opts.type == 'snippet'
-			call snipMate#SetByPath(a:result, [opts.trigger, opts.name_prefix.' '.opts.name], readfile(f))
+			call snipMate#SetByPath(a:result, opts.trigger,
+						\ opts.name_prefix . ' ' . opts.name, readfile(f))
 		else
 			throw "unexpected"
 		endif
