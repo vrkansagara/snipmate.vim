@@ -40,7 +40,7 @@ inoremap <silent> <Plug>snipMateTrigger        <C-R>=snipMate#TriggerSnippet(1)<
 inoremap <silent> <Plug>snipMateBack           <C-R>=snipMate#BackwardsSnippet()<CR>
 snoremap <silent> <Plug>snipMateBack           <Esc>a<C-R>=snipMate#BackwardsSnippet()<CR>
 inoremap <silent> <Plug>snipMateShow           <C-R>=snipMate#ShowAvailableSnips()<CR>
-xnoremap <silent> <Plug>snipMateVisual         :<C-U>call <SID>grab_visual()<CR>i
+xnoremap <silent> <Plug>snipMateVisual         :<C-U>call <SID>grab_visual()<CR>gv"_c
 
 " config which can be overridden (shared lines)
 if !exists('g:snipMate')
@@ -79,7 +79,7 @@ endf
 function! s:grab_visual()
 	let a_save = @a
 	try
-		normal! gv"ad
+		normal! gv"ay
 		let b:snipmate_content_visual = @a
 	finally
 		let @a = a_save
