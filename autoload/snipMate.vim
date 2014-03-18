@@ -67,8 +67,13 @@ fun! snipMate#expandSnip(snip, col)
 			au CursorMoved,CursorMovedI <buffer> call b:snip_state.update_changes()
 		aug END
 		call b:snip_state.set_stop(0)
+		let ret = b:snip_state.select_word()
 
-		return b:snip_state.select_word()
+		if b:snip_state.stop_count == 1
+			call b:snip_state.remove()
+		endif
+
+		return ret
 	else
 		unlet b:snip_state
 		" Place cursor at end of snippet if no tab stop is given
