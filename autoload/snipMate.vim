@@ -2,7 +2,6 @@
 if !exists('g:snipMate')
   let g:snipMate = {}
 endif
-let s:c = g:snipMate
 
 try
 	call tlib#input#List('mi', '', [])
@@ -406,12 +405,26 @@ fun! snipMate#ReadSnippetsFile(file)
 	return [result, new_scopes]
 endf
 
+function! s:GetScopes()
+	let ret = exists('b:snipMate_scope_aliases') ? copy(b:snipMate.scope_aliases) : {}
+	let global = get(g:snipMate, 'scope_aliases', {})
+	for alias in keys(global)
+		if has_key(ret, alias)
+			let ret[alias] = join(split(ret[alias], ',')
+						\ + split(global[alias], ','), ',')
+		else
+			let ret[alias] = global[alias]
+		endif
+	endfor
+	return ret
+endfunction
+
 " adds scope aliases to list.
 " returns new list
 " the aliases of aliases are added recursively
 fun! s:AddScopeAliases(list)
   let did = {}
-  let scope_aliases = get(s:c,'scope_aliases', {})
+  let scope_aliases = s:GetScopes()
   let new = a:list
   let new2 =  []
   while !empty(new)
@@ -456,7 +469,7 @@ endif
 "
 "     mustExist = 0 is used by OpenSnippetFiles
 function! snipMate#GetSnippetFiles(mustExist, scopes, trigger)
-	let paths = join(funcref#Call(s:c.snippet_dirs), ',')
+	let paths = join(funcref#Call(g:snipMate.snippet_dirs), ',')
 	let result = {}
 	let scopes = s:AddScopeAliases(a:scopes)
 	let trigger = escape(a:trigger, "*[]?{}`'$")
@@ -614,7 +627,7 @@ endf
 
 fun! snipMate#ScopesByFile()
 	" duplicates are removed in AddScopeAliases
-	return filter(funcref#Call(s:c.get_scopes), "v:val != ''")
+	return filter(funcref#Call(g:snipMate.get_scopes), "v:val != ''")
 endf
 
 " used by both: completion and insert snippet
@@ -647,8 +660,8 @@ fun! snipMate#GetSnippetsForWordBelowCursor(word, exact)
 	let snippet = ''
 	" prefer longest word
 	for word in lookups
-		let s:c.word = word
-		for [k,snippetD] in items(funcref#Call(s:c['get_snippets'], [snipMate#ScopesByFile(), word]))
+		let g:snipMate.word = word
+		for [k,snippetD] in items(funcref#Call(g:snipMate['get_snippets'], [snipMate#ScopesByFile(), word]))
 			" hack: require exact match
 			if a:exact && k !=# word
 				continue
@@ -708,7 +721,7 @@ fun! snipMate#ShowAvailableSnips()
 
 	" Pretty hacky, but really can't have the tab swallowed!
 	if len(matches) == 0
-		call feedkeys(s:c['no_match_completion_feedkeys_chars'], 'n')
+		call feedkeys(g:snipMate['no_match_completion_feedkeys_chars'], 'n')
 		return ""
 	endif
 
