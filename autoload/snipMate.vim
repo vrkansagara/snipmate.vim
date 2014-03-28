@@ -483,6 +483,7 @@ function! snipMate#GetSnippetFiles(mustExist, scopes, trigger)
 	for scope in scopes
 
 		for f in s:Glob(paths, 'snippets/' . scope . '.snippets') +
+					\ s:Glob(paths, 'snippets/' . scope . '_*.snippets') +
 					\ s:Glob(paths, 'snippets/' . scope . '/*.snippets')
 			let result[f] = { 'exists' : 1, 'type' : 'snippets',
 						\ 'name_prefix' : fnamemodify(f, ':t:r') }
