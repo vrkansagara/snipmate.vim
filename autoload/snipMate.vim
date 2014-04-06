@@ -64,7 +64,11 @@ fun! snipMate#expandSnip(snip, col)
 
 	if b:snip_state.stop_count
 		aug snipmate_changes
-			au CursorMoved,CursorMovedI <buffer> call b:snip_state.update_changes()
+			au CursorMoved,CursorMovedI <buffer> if exists('b:snip_state') |
+						\     call b:snip_state.update_changes() |
+						\ else |
+						\     silent! au! snipmate_changes * <buffer> |
+						\ endif
 		aug END
 		call b:snip_state.set_stop(0)
 		let ret = b:snip_state.select_word()
