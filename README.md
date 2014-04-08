@@ -76,6 +76,10 @@ The SnippetsWithFolding example shows how to patch / add snippets on the fly.
 * Fix bug with mirrors in the first column
 * Fix bug with tabs in indents ([#143][143])
 * Fix bug with mirrors in placeholders
+* Fix reading single snippet files
+* Fix the use of the visual map at the end of a line
+* Add `:SnipMateLoadScope` command and buffer-local scope aliases
+* Load `<scope>_*.snippets` files
 
 ### 0.87 - 2014-01-04 ###
 
