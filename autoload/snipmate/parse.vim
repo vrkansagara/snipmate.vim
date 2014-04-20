@@ -1,190 +1,228 @@
 " Snippet definition parsing code
 
+" The next two functions were essentially taken from Fugitive
+" <https://github.com/tpope/vim-fugitive>
+function! s:function(name) abort
+    return function(matchstr(expand('<sfile>'), '<SNR>\d\+_') . a:name)
+endfunction
+
+function! s:add_methods(namespace, method_names) abort
+    for name in a:method_names
+        let s:{a:namespace}_proto[name] = s:function(a:namespace . '_' . name)
+    endfor
+endfunction
+
+" A simple stack {{{1
+let s:stack_proto = {}
+
+function! s:stack_push(item) dict
+    call add(self.items, a:item)
+endfunction
+
+function! s:stack_pop() dict
+    if !empty(self.items)
+        return remove(self.items, -1)
+    endif
+endfunction
+
+function! s:stack_top() dict
+    return get(self.items, -1)
+endfunction
+
+call s:add_methods('stack', [ 'push', 'pop', 'top' ])
+
 function! s:new_stack(...)
-    let stack = { 'items' : [] }
-
-    function! stack.push(item) dict
-        call add(self.items, a:item)
-    endfunction
-
-    function! stack.top() dict
-        return get(self.items, -1)
-    endfunction
-
-    function! stack.pop() dict
-        if !empty(self.items)
-            return remove(self.items, -1)
-        endif
-    endfunction
-
+    let ret = copy(s:stack_proto)
+    let ret.items = []
     if a:0
-        call stack.push(a:1)
+        call ret.push(a:1)
+    endif
+    return ret
+endfunction
+
+" The parsing code {{{1
+let s:parser_proto = {}
+
+function! s:new_parser(text)
+    let ret = copy(s:parser_proto)
+    let ret.input = a:text
+    let ret.len = strlen(ret.input)
+    let ret.pos = 0
+    let ret.next = ret.input[ret.pos]
+    let ret.vars = {}
+    return ret
+endfunction
+
+function! s:parser_advance() dict
+    let self.pos += 1
+    let self.next = self.input[self.pos]
+endfunction
+
+function! s:parser_same(tok) dict
+    if self.next == a:tok
+        call self.advance()
+        return 1
+    else
+        return 0
+    endif
+endfunction
+
+function! s:parser_id() dict
+    if self.input[(self.pos):(self.pos+5)] == 'VISUAL'
+        let self.pos += 5
+        call self.advance()
+        return 'VISUAL'
+    elseif self.next =~ '\d'
+        let end = matchend(self.input, '\d\+', self.pos)
+        let res = strpart(self.input, self.pos, end - self.pos)
+        let self.pos = end - 1
+        call self.advance()
+        return +res
+    endif
+    return -1
+endfunction
+
+function! s:parser_add_var(var) dict
+    let id = a:var[0]
+    if !has_key(self.vars, id)
+        let self.vars[id] = { 'instances' : [] }
+    endif
+    call add(self.vars[id].instances, a:var)
+endfunction
+
+function! s:parser_var() dict
+    let ret = []
+    if self.same('{')
+        let id = self.id()
+        if id >= 0
+            call add(ret, id)
+            call extend(ret, self.varend())
+        endif
+    else
+        let id = self.id()
+        if id >= 0
+            call add(ret, id)
+        endif
+    endif
+    return ret
+endfunction
+
+function! s:parser_varend() dict
+    let ret = []
+    if self.same(':')
+        call extend(ret, self.placeholder())
+    elseif self.same('/')
+        call add(ret, self.subst())
+    endif
+    call self.same('}')
+    return ret
+endfunction
+
+function! s:parser_placeholder() dict
+    return self.parse('}')
+endfunction
+
+function! s:parser_subst() dict
+    let ret = {}
+    if self.same('/')
+        let ret.flags = 'g'
+    endif
+    let ret.pat = join(self.text('/', 1))
+    if self.same('/')
+        let ret.sub =  join(self.text('}', 1))
+    endif
+    return ret
+endfunction
+
+function! s:parser_expr() dict
+    let str = join(self.text('`', 1))
+    let ret = string(eval(str))
+    call self.same('`')
+    return ret
+endfunction
+
+function! s:parser_text(...) dict
+    let res = []
+    let val = ''
+    if a:0 == 2 && a:2
+        let till = '\V' . escape(a:1, '\')
+    else
+        let till = '[`$' . (a:0 ? a:1 : '') . ']'
     endif
 
-    return stack
+    while self.pos < self.len
+        if self.same('\')
+            let val .= self.next
+            call self.advance()
+        elseif self.next =~# till
+            break
+        elseif self.next == "\n"
+            call add(res, val)
+            let val = ''
+            call self.advance()
+        elseif self.next == "\t" && &expandtab
+            let val .= repeat(' ', (&sts > 0) ? &sts : &sw)
+            call self.advance()
+        else
+            let val .= self.next
+            call self.advance()
+        endif
+    endwhile
+
+    call add(res, val)
+    return res
+endfunction
+
+function! s:parser_parse(...) dict
+    let ret = []
+    while self.pos < self.len
+        if self.same('$')
+            let var = self.var()
+            if var[0] is# 'VISUAL'
+                call add(ret, s:visual_string(var))
+            elseif var[0] >= 0
+                call add(ret, var)
+                call self.add_var(var)
+            endif
+        elseif self.same('`')
+            let expr = self.expr()
+            if type(ret[-1]) == type('')
+                let ret[-1] .= expr
+            else
+                call add(ret, expr)
+            endif
+        else
+            let text = a:0 ? self.text(a:1) : self.text()
+            if exists('expr')
+                let ret[-1] .= text[0]
+                call remove(text, 0)
+                unlet expr
+            endif
+            call extend(ret, text)
+        endif
+        if a:0 && self.next == a:1
+            break
+        endif
+    endwhile
+    return ret
+endfunction
+
+call s:add_methods('parser', [ 'advance', 'same', 'id', 'add_var', 'var', 'varend', 'placeholder', 'subst', 'expr', 'text', 'parse' ])
+
+function! s:visual_string(var)
+    let dict = get(a:var, 1, {})
+    let pat = get(dict, 'pat', '')
+    let sub = get(dict, 'sub', '')
+    let flags = get(dict, 'flags', '')
+    let ret = substitute(get(b:, 'snipmate_visual', ''), pat, sub, flags)
+    unlet! b:snipmate_visual
+    return ret
 endfunction
 
 function! snipmate#parse#snippet(text)
-    if type(a:text) == type([])
-        let text = join(a:text, "\n")
-    else
-        let text = a:text
-    endif
-
-    let state_stack = s:new_stack('none')
-    let pos = 0
-    let result = []
-    let stops = {}
-    let target_stack = s:new_stack(result)
-    let contain_stack = s:new_stack([])
-    let stop_proto = { 'contains' : [], 'placeholder' : [''] }
-
-    while pos < strlen(a:text)
-        let cur_state = state_stack.top()
-        let cur_target = target_stack.top()
-        let cur_contain = contain_stack.top()
-        let [tok_type, tok_val, pos] = s:next_token(a:text, pos)
-
-        if cur_state == 'expr' && tok_type == 'expr'
-            call state_stack.pop()
-            let str = join(target_stack.pop(), '')
-            call add(target_stack.top(), string(eval(str)))
-        elseif cur_state == 'mirror' && tok_type == 'id'
-            call add(cur_target, +tok_val)
-            call add(cur_contain, +tok_val)
-            call state_stack.pop()
-        elseif cur_state == 'stop' && tok_type == 'id'
-            let num = +tok_val
-            call add(cur_target, num)
-            call add(cur_contain, num)
-            let stops[num] = deepcopy(stop_proto)
-            let [tok_type, tok_val, pos] = s:next_token(a:text, pos)
-            if tok_type == 'placeholder'
-                call state_stack.push('placeholder')
-                call contain_stack.push(stops[num].contains)
-            elseif tok_type == 'stop end'
-                call add(cur_target, '')
-                call state_stack.pop()
-                call target_stack.pop()
-            else
-                call state_stack.pop()
-                call target_stack.pop()
-            endif
-        elseif cur_state == 'stop' && tok_type == 'visual'
-            let [tok_type, tok_val, pos] = s:next_token(a:text, pos)
-            if tok_type == 'stop end'
-                call target_stack.pop()
-                let cur_target = target_stack.top()
-                call remove(cur_target, -1)
-                let b:snipmate_visual = get(b:, 'snipmate_visual', '')
-                call add(cur_target, b:snipmate_visual)
-                unlet b:snipmate_visual
-            else
-                call target_stack.pop()
-            endif
-            call state_stack.pop()
-        elseif cur_state == 'placeholder'
-                    \ && tok_type == 'stop end'
-            call state_stack.pop()
-            call state_stack.pop()
-            let stops[cur_target[0]].placeholder = cur_target[1:]
-            call target_stack.pop()
-            call contain_stack.pop()
-        elseif cur_state == 'none' || cur_state == 'placeholder'
-            if tok_type == 'stop start'
-                call add(cur_target, [])
-                call target_stack.push(cur_target[-1])
-                call state_stack.push('stop')
-            elseif tok_type == 'mirror'
-                call state_stack.push('mirror')
-            elseif tok_type == 'expr'
-                let cur_target = []
-                call target_stack.push(cur_target)
-                call state_stack.push('expr')
-            else
-                call add(cur_target, tok_val)
-            endif
-        elseif cur_state == 'expr'
-            call add(cur_target, tok_val)
-        else
-            call state_stack.pop()
-        endif
-    endwhile
-
-    return [s:format_text(result), stops]
+    let parser = s:new_parser(a:text)
+    let result = parser.parse()
+    return [result, parser.vars]
 endfunction
 
-function! s:next_token(text, pos)
-    let pos = a:pos
-    let val = ''
-
-    while pos < strlen(a:text)
-        if a:text[pos] == '\' && a:text[pos + 1] =~ '[\$`}]'
-            let val .= a:text[pos + 1]
-            let pos += 2
-        elseif a:text[pos] =~ '[`${:}0-9]' && !empty(val)
-            return ['text', val, pos]
-        elseif a:text[pos] == '$' " stop or mirror
-            if a:text[pos + 1] == '{'
-                return ['stop start', '${', pos + 2]
-            else
-                return ['mirror', '$', pos + 1]
-            endif
-        elseif a:text[pos] == '`'
-            return ['expr', '`', pos + 1]
-        elseif a:text[pos] == ':'
-            return ['placeholder', ':', pos + 1]
-        elseif a:text[pos] == '}'
-            return ['stop end', '}', pos + 1]
-        elseif a:text[(pos):(pos+5)] == 'VISUAL'
-            return ['visual', 'VISUAL', pos + 6]
-        elseif a:text[pos] =~ '\d'
-            let end = matchend(a:text, '\d\+', pos)
-            return ['id', strpart(a:text, pos, end - pos), end]
-        elseif a:text[pos] == "\t" && &expandtab
-            let val .= repeat(' ', (&sts > 0) ? &sts : &sw)
-            let pos += 1
-        else
-            let val .= a:text[pos]
-            let pos += 1
-        endif
-    endwhile
-
-    return ['eof', val, pos]
-endfunction
-
-" Join consecutive pieces of text and split text according to lines
-function! s:format_text(sniplist)
-    let pos = 0
-    let sniplist = a:sniplist
-
-    while pos < len(sniplist)
-        if type(sniplist[pos]) == type('')
-            let i = 0
-            let text = ''
-            while pos + i < len(sniplist)
-                        \ && type(sniplist[pos + i]) == type('')
-                let text .= sniplist[pos + i]
-                let i += 1
-            endwhile
-            call remove(sniplist, pos, pos + i - 1)
-            let pos += s:splice(sniplist, split(text, "\n", 1), pos)
-        elseif type(sniplist[pos]) == type([])
-            call s:format_text(sniplist[pos])
-            let pos += 1
-        else
-            let pos += 1
-        endif
-    endwhile
-
-    return sniplist
-endfunction
-
-function! s:splice(target, other, idx)
-    let idx = a:idx
-    for i in a:other
-        call insert(a:target, i, idx)
-        let idx += 1
-    endfor
-    return len(a:other)
-endfunction
+" }}}1

@@ -41,6 +41,9 @@ function! snipMate#expandSnip(snip, col)
 		return ''
 	endif
 
+	" Build stop/mirror info
+	let b:snip_state.stop_count = s:build_stops(snippet, b:snip_state.stops, lnum, col, indent)
+
 	" Expand snippet onto current position
 	let snipLines = s:expansion_text(snippet, b:snip_state.stops)
 	let afterCursor = strpart(line, col - 1)
@@ -65,51 +68,44 @@ function! snipMate#expandSnip(snip, col)
 		silent! exec lnum . ',' . (lnum + len(snipLines) - 1) . 'foldopen'
 	endif
 
-	let b:snip_state.stop_count = s:build_stops(snippet, b:snip_state.stops, lnum, col, indent)
+	aug snipmate_changes
+		au CursorMoved,CursorMovedI <buffer> if exists('b:snip_state') |
+					\     call b:snip_state.update_changes() |
+					\ else |
+					\     silent! au! snipmate_changes * <buffer> |
+					\ endif
+	aug END
 
-	if !empty(b:snip_state.stops)
-		aug snipmate_changes
-			au CursorMoved,CursorMovedI <buffer> if exists('b:snip_state') |
-						\     call b:snip_state.update_changes() |
-						\ else |
-						\     silent! au! snipmate_changes * <buffer> |
-						\ endif
-		aug END
-		call b:snip_state.set_stop(1)
-		let ret = b:snip_state.select_word()
-
-		if b:snip_state.stop_count == 2
-			call b:snip_state.remove()
-		endif
-
-		return ret
-	else
-		unlet b:snip_state
-		" Place cursor at end of snippet if no tab stop is given
-		let newlines = len(snipLines) - 1
-		call cursor(lnum + newlines, indent + len(snipLines[-1]) - len(afterCursor)
-					\ + (newlines ? 0: col - 1))
-	endif
-	return ''
+	let b:snip_state.stop_no = 0
+	return b:snip_state.set_stop(0)
 endfunction
 
 " Update state information to correspond to the given tab stop
-function! s:state_proto.set_stop(stop)
-	let self.stop_no  = a:stop
+function! s:state_proto.set_stop(backwards)
+	let self.stop_no += a:backwards? -1 : 1
 	while !has_key(self.stops, self.stop_no)
 		if self.stop_no == self.stop_count
 			let self.stop_no = 0
 		endif
-		let self.stop_no += 1
+		if self.stop_no <= 0 && a:backwards
+			let self.stop_no = self.stop_count - 1
+		endif
+		let self.stop_no += a:backwards? -1 : 1
 	endwhile
 	let self.cur_stop    = self.stops[self.stop_no]
-	let self.stop_len    = len(s:placeholder_str(a:stop, self.stops))
+	let self.stop_len    = len(s:placeholder_str(self.stop_no, self.stops))
 	let self.start_col   = self.cur_stop.col
 	let self.end_col     = self.start_col + self.stop_len
 	let self.mirrors     = get(self.cur_stop, 'mirrors', [])
 	let self.old_mirrors = deepcopy(self.mirrors)
-	call call('cursor', [self.cur_stop.line, self.cur_stop.col])
+	call cursor(self.cur_stop.line, self.cur_stop.col)
 	let self.prev_len    = col('$')
+	let self.changed = 0
+	let ret = self.select_word()
+	if (self.stop_no == 0 || self.stop_no == self.stop_count - 1) && !a:backwards
+		call self.remove()
+	endif
+	return ret
 endfunction
 
 " FIXME: Limit recursion depth
@@ -120,8 +116,6 @@ function! s:placeholder_str(num, stops)
 	for item in list
 		if type(item) == type('')
 			let text .= item
-		elseif type(item) == type(0)
-			let text .= s:placeholder_str(item, a:stops)
 		elseif type(item) == type([])
 			let text .= s:placeholder_str(item[0], a:stops)
 		endif
@@ -147,9 +141,6 @@ function! s:expansion_text(snippet, stops)
 				call add(lines, item)
 			endif
 			let add_to = 0
-		elseif type(item) == type(0)
-			let lines[-1] .= s:placeholder_str(item, a:stops)
-			let add_to = 1
 		elseif type(item) == type([])
 			let lines[-1] .= s:placeholder_str(item[0], a:stops)
 			let add_to = 1
@@ -167,13 +158,33 @@ function! s:build_stops(snippet, stops, lnum, col, indent)
 	let line  = a:lnum
 	let col   = a:col
 
+	for [id, dict] in items(stops)
+		for i in dict.instances
+			if len(i) > 1 && type(i[1]) != type({})
+				if !has_key(dict, 'placeholder')
+					let dict.placeholder = i[1:]
+				else
+					unlet i[1:]
+				endif
+			endif
+		endfor
+		if !has_key(dict, 'placeholder')
+			let dict.placeholder = []
+			let j = 0
+			while len(dict.instances[j]) > 1
+				let j += 1
+			endwhile
+			call add(dict.instances[j], '')
+		endif
+		unlet dict.instances
+	endfor
+
 	let [line, col] = s:build_loc_info(a:snippet, stops, line, col, a:indent)
 
 	" add zero tabstop if it doesn't exist and then link it to the highest stop
 	" number
 	let stops[0] = get(stops, 0,
-				\ { 'contains' : [], 'placeholder' : [''],
-				\ 'line' : line, 'col' : col })
+				\ { 'placeholder' : [], 'line' : line, 'col' : col })
 	let stop_count = max(keys(stops)) + 2
 	let stops[stop_count - 1] = stops[0]
 
@@ -181,10 +192,10 @@ function! s:build_stops(snippet, stops, lnum, col, indent)
 endfunction
 
 function! s:build_loc_info(snippet, stops, line, col, indent)
-	let stops	= a:stops
-	let line	= a:line
-	let col		= a:col
-	let pos		= 0
+	let stops   = a:stops
+	let line    = a:line
+	let col     = a:col
+	let pos     = 0
 	let in_text = 0
 
 	while pos < len(a:snippet)
@@ -197,18 +208,16 @@ function! s:build_loc_info(snippet, stops, line, col, indent)
 			endif
 			let col += len(item)
 			let in_text = 1
-		elseif type(item) == type(0)
-			if !has_key(stops[item], 'mirrors')
-				let stops[item].mirrors = []
-			endif
-			call add(stops[item].mirrors, [line, col])
-			let col += len(s:placeholder_str(item, stops))
-			let in_text = 0
 		elseif type(item) == type([])
-			let num = item[0]
-			let stops[num].line = line
-			let stops[num].col = col
-			let [line, col] = s:build_loc_info(item[1:], stops, line, col, a:indent)
+			let id = item[0]
+			if len(item) > 1 && type(item[1]) != type({})
+				let stops[id].line = line
+				let stops[id].col = col
+				let [line, col] = s:build_loc_info(item[1:], stops, line, col, a:indent)
+			else
+				call s:add_mirror(stops, id, line, col, item)
+				let col += len(s:placeholder_str(id, stops))
+			endif
 			let in_text = 0
 		endif
 
@@ -217,6 +226,19 @@ function! s:build_loc_info(snippet, stops, line, col, indent)
 	endwhile
 
 	return [line, col]
+endfunction
+
+function! s:add_mirror(stops, id, line, col, item)
+	let stops = a:stops
+	let item = a:item
+	let stops[a:id].mirrors = get(stops[a:id], 'mirrors', [])
+	let mirror = get(a:item, 1, {})
+	let mirror.line = a:line
+	let mirror.col = a:col
+	call add(stops[a:id].mirrors, mirror)
+	if len(item) == 1
+		call add(item, mirror)
+	endif
 endfunction
 
 " Jump to the next/previous tab stop
@@ -231,25 +253,28 @@ function! s:state_proto.jump_stop(backwards)
 
 	" Store placeholder/location changes
 	let self.cur_stop.col = self.start_col
-	let self.cur_stop.placeholder = [strpart(getline('.'),
-				\ self.start_col - 1, self.end_col - self.start_col)]
-
-	let self.stop_no += a:backwards ? -1 : 1
-	" Loop over the snippet when going backwards from the beginning
-	if self.stop_no < 0
-		let self.stop_no = self.stop_count - 2
-		while !has_key(self.stops, self.stop_no)
-			let self.stop_no -= 1
-		endwhile
+	if self.changed
+		call self.remove_nested()
+		let self.cur_stop.placeholder = [strpart(getline('.'),
+					\ self.start_col - 1, self.end_col - self.start_col)]
 	endif
 
-	if self.stop_no == self.stop_count
-		call self.remove()
-		return ''
-	endif
+	return self.set_stop(a:backwards)
+endfunction
 
-	call self.set_stop(self.stop_no)
-	return self.select_word()
+function! s:state_proto.remove_nested(...)
+	let id = a:0 ? a:1 : self.stop_no
+	for i in self.stops[id].placeholder
+		if type(i) == type([])
+			if len(i) > 1 && type(i[1]) != type({})
+				call self.remove_nested(i[0])
+				call remove(self.stops, i[0])
+			else
+				call filter(self.stops[i[0]].mirrors, 'v:val is i')
+			endif
+		endif
+		unlet i " Avoid E706
+	endfor
 endfunction
 
 " Update tab stop/mirror locations to account for mirror changes
@@ -257,16 +282,16 @@ function! s:state_proto.update_stops()
 	let changeLen = self.end_col - self.stop_len - self.start_col
 	let curLine = line('.')
 	if changeLen != 0
+		" Filter the zeroth stop because it's duplicated as the last
 		for stop in values(filter(copy(self.stops), 'v:key != 0'))
 			if stop is self.cur_stop
 				continue
 			endif
 
 			let changed = stop.line == curLine && stop.col > self.start_col
-			let changedVars = count(stop.contains, self.stop_no)
 			" Subtract changeLen from each tab stop that was after any of
 			" the current tab stop's placeholders.
-			for [lnum, col] in self.old_mirrors
+			for [lnum, col] in s:listize_mirror(self.old_mirrors)
 				if lnum > stop.line
 					break
 				endif
@@ -277,26 +302,23 @@ function! s:state_proto.update_stops()
 				endif
 			endfor
 			let stop.col += changeLen * changed
-			" FIXME: update placeholder
-			" let pos[2] += changeLen * changedVars " Parse variables within placeholders
-												  " e.g., "${1:foo} ${2:$1bar}"
 
 			" Do the same to any placeholders in the other tab stops.
 			for mirror in get(stop, 'mirrors', [])
-				let changed = mirror[0] == curLine && mirror[1] > self.start_col
-				if changed && mirror[1] < self.start_col + self.cur_stop.col
+				let changed = mirror.line == curLine && mirror.col > self.start_col
+				if changed && mirror.col < self.start_col + self.cur_stop.col
 					call remove(stop.mirrors, index(stop.mirrors, mirror))
 					continue
 				endif
-				for [lnum, col] in self.old_mirrors
-					if lnum > mirror[0]
+				for [lnum, col] in s:listize_mirror(self.old_mirrors)
+					if lnum > mirror.line
 						break
 					endif
-					if mirror[0] == lnum && mirror[1] > col
+					if mirror.line == lnum && mirror.col > col
 						let changed += 1
 					endif
 				endfor
-				let mirror[1] += changeLen * changed
+				let mirror.col += changeLen * changed
 			endfor
 		endfor
 	endif
@@ -313,11 +335,16 @@ function! s:state_proto.select_word()
 	return len == 1 ? "\<esc>".l.'gh' : "\<esc>".l.'v'.(len - 1)."l\<c-g>"
 endfunction
 
+function! s:listize_mirror(mirrors)
+	return map(copy(a:mirrors), '[v:val.line, v:val.col]')
+endfunction
+
 " Update the snippet as text is typed. The self.update_mirrors() function does
 " the actual work.
 " If the cursor moves outside of a placeholder, call self.remove()
 function! s:state_proto.update_changes()
 	let change_len = col('$') - self.prev_len
+	let self.changed = self.changed || change_len != 0
 	let self.end_col += change_len
 	let col = col('.')
 
@@ -340,25 +367,24 @@ function! s:state_proto.update_mirrors(change)
 	let oldStartSnip = self.start_col
 	let i = 0
 
-	for [lnum, col] in self.mirrors
+	for mirror in self.mirrors
 		if changeLen != 0
 			let start = self.start_col
-			if lnum == curLine && col <= start
+			if mirror.line == curLine && mirror.col <= start
 				let self.start_col += changeLen
 				let self.end_col += changeLen
 			endif
 			for nPos in self.mirrors[(i):]
 				" This list is in ascending order, so quit if we've gone too far.
-				if nPos[0] > lnum
+				if nPos.line > mirror.line
 					break
 				endif
-				if nPos[0] == lnum && nPos[1] > col
-					let nPos[1] += changeLen
+				if nPos.line == mirror.line && nPos.col > mirror.col
+					let nPos.col += changeLen
 				endif
 			endfor
-			if lnum == curLine && col > start
-				let col += changeLen
-				let self.mirrors[i][1] = col
+			if mirror.line == curLine && mirror.col > start
+				let mirror.col += changeLen
 			endif
 			let i += 1
 		endif
@@ -366,11 +392,11 @@ function! s:state_proto.update_mirrors(change)
 		" Split the line into three parts: the mirror, what's before it, and
 		" what's after it. Then combine them using the new mirror string.
 		" Subtract one to go from column index to byte index
-		let theline = getline(lnum)
-		let update  = strpart(theline, 0, col - 1)
-		let update .= newWord
-		let update .= strpart(theline, col + self.end_col - self.start_col - a:change - 1)
-		call setline(lnum, update)
+		let theline = getline(mirror.line)
+		let update  = strpart(theline, 0, mirror.col - 1)
+		let update .= substitute(newWord, get(mirror, 'pat', ''), get(mirror, 'sub', ''), get(mirror, 'flags', ''))
+		let update .= strpart(theline, mirror.col + self.end_col - self.start_col - a:change - 1)
+		call setline(mirror.line, update)
 	endfor
 
 	" Reposition the cursor in case a var updates on the same line but before
