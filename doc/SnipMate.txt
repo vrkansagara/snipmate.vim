@@ -130,6 +130,10 @@ g:snipMate.no_default_aliases
                                     php         php,html,javascript
                                     ur          html,javascript
                                     xhtml       html
+                                Individual defaults can be disabled by setting
+                                them to an empty value: >
+                                    let g:snipMate.scope_aliases.php = ''
+<                                will disable the default PHP alias.
                                 Note: Setting this option does not disable
                                 scope aliases entirely, only those made by
                                 SnipMate itself. Any scope aliases created by
