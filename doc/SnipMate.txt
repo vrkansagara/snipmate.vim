@@ -115,7 +115,9 @@ g:snipMate.scope_aliases        A |Dictionary| associating certain filetypes
                                 variant b:snipMate_scope_aliases is merged
                                 with the global variant.
 
-g:snipMate_no_default_aliases
+g:snipMate_no_default_aliases   Note: This has been renamed to the following.
+
+g:snipMate.no_default_aliases
                                 When set to 1, prevents SnipMate from loading
                                 default scope aliases. The defaults are:
                                     Filetype    Alias ~
