@@ -12,35 +12,6 @@ function! s:add_methods(namespace, method_names) abort
     endfor
 endfunction
 
-" A simple stack {{{1
-let s:stack_proto = {}
-
-function! s:stack_push(item) dict
-    call add(self.items, a:item)
-endfunction
-
-function! s:stack_pop() dict
-    if !empty(self.items)
-        return remove(self.items, -1)
-    endif
-endfunction
-
-function! s:stack_top() dict
-    return get(self.items, -1)
-endfunction
-
-call s:add_methods('stack', [ 'push', 'pop', 'top' ])
-
-function! s:new_stack(...)
-    let ret = copy(s:stack_proto)
-    let ret.items = []
-    if a:0
-        call ret.push(a:1)
-    endif
-    return ret
-endfunction
-
-" The parsing code {{{1
 let s:parser_proto = {}
 
 function! s:new_parser(text)
@@ -224,5 +195,3 @@ function! snipmate#parse#snippet(text)
     let result = parser.parse()
     return [result, parser.vars]
 endfunction
-
-" }}}1
