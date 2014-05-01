@@ -24,8 +24,8 @@ function! s:new_parser(text)
     return ret
 endfunction
 
-function! s:parser_advance() dict
-    let self.pos += 1
+function! s:parser_advance(...) dict
+    let self.pos += a:0 ? a:1 : 1
     let self.next = self.input[self.pos]
 endfunction
 
@@ -40,15 +40,13 @@ endfunction
 
 function! s:parser_id() dict
     if self.input[(self.pos):(self.pos+5)] == 'VISUAL'
-        let self.pos += 5
-        call self.advance()
+        call self.advance(6)
         return 'VISUAL'
     elseif self.next =~ '\d'
         let end = matchend(self.input, '\d\+', self.pos)
         let res = strpart(self.input, self.pos, end - self.pos)
-        let self.pos = end - 1
-        call self.advance()
-        return +res
+        call self.advance(end - self.pos)
+        return +res " force conversion to Number
     endif
     return -1
 endfunction
@@ -150,7 +148,7 @@ function! s:parser_parse(...) dict
         if self.same('$')
             let var = self.var()
             if var[0] is# 'VISUAL'
-                call add(ret, s:visual_string(var))
+                call add(ret, s:visual_placeholder(var))
             elseif var[0] >= 0
                 call add(ret, var)
                 call self.add_var(var)
@@ -180,7 +178,7 @@ endfunction
 
 call s:add_methods('parser', [ 'advance', 'same', 'id', 'add_var', 'var', 'varend', 'placeholder', 'subst', 'expr', 'text', 'parse' ])
 
-function! s:visual_string(var)
+function! s:visual_placeholder(var)
     let dict = get(a:var, 1, {})
     let pat = get(dict, 'pat', '')
     let sub = get(dict, 'sub', '')
