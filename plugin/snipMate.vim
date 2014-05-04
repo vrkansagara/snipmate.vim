@@ -87,9 +87,11 @@ let g:snipMate['get_snippets'] = get(g:snipMate, 'get_snippets', funcref#Functio
 
 " List of paths where snippets/ dirs are located, or a function returning such
 " a list
-let g:snipMate['snippet_dirs'] = get(g:snipMate, 'snippet_dirs', funcref#Function('return split(&runtimepath,",")'))
-if type(g:snipMate['snippet_dirs']) == type([])
-	call map(g:snipMate['snippet_dirs'], 'expand(v:val)')
+let g:snipMate['snippet_dirs'] = get(g:snipMate, 'snippet_dirs', split(&rtp, ','))
+if type(g:snipMate['snippet_dirs']) != type([])
+	echohl WarningMsg
+	echom "g:snipMate['snippet_dirs'] must be a List"
+	echohl None
 endif
 
 " _ is default scope added always

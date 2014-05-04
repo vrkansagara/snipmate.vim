@@ -393,7 +393,7 @@ fun! snipMate#ReadSnippetsFile(file)
 			let content .= strpart(line, 1)."\n"
 			continue
 		elseif inSnip
-			call add(result, [trigger, name == '' ? 'default' : name, content[:-2]])
+			call add(result, [trigger, name, content[:-2]])
 			let inSnip = 0
 		endif
 
@@ -450,73 +450,6 @@ fun! s:AddScopeAliases(list)
   return keys(did)
 endf
 
-if v:version >= 704
-	function! s:Glob(path, expr)
-		return split(globpath(a:path, a:expr), "\n")
-	endfunction
-else
-	function! s:Glob(path, expr)
-		let res = []
-		for p in split(a:path, ',')
-			let h = split(fnamemodify(a:expr, ':h'), '/')[0]
-			if isdirectory(p . '/' . h)
-				call extend(res, split(glob(p . '/' . a:expr), "\n"))
-			endif
-		endfor
-		return filter(res, 'filereadable(v:val)')
-	endfunction
-endif
-
-" returns dict of
-" { path: { 'type': one of 'snippet' 'snippets',
-"           'exists': 1 or 0
-"           " for single snippet files:
-"           'name': name of snippet
-"           'trigger': trigger of snippet
-"         }
-" }
-" use mustExist = 1 to return existing files only
-"
-"     mustExist = 0 is used by OpenSnippetFiles
-function! snipMate#GetSnippetFiles(mustExist, scopes, trigger)
-	let paths = join(funcref#Call(g:snipMate.snippet_dirs), ',')
-	let result = {}
-	let scopes = s:AddScopeAliases(a:scopes)
-	let trigger = escape(a:trigger, "*[]?{}`'$")
-
-	" collect existing files
-	for scope in scopes
-
-		for f in s:Glob(paths, 'snippets/' . scope . '.snippets') +
-					\ s:Glob(paths, 'snippets/' . scope . '_*.snippets') +
-					\ s:Glob(paths, 'snippets/' . scope . '/*.snippets')
-			let result[f] = { 'exists' : 1, 'type' : 'snippets',
-						\ 'name_prefix' : fnamemodify(f, ':t:r') }
-		endfor
-
-		" We check for trigger* in the next two loops. In the case of an exact
-		" match, that'll be handled in snipMate#GetSnippetsForWordBelowCursor.
-		for f in s:Glob(paths, 'snippets/' . scope . '/' . trigger . '*.snippet')
-			let result[f] = {'exists': 1, 'type': 'snippet', 'name': 'default',
-						\ 'trigger': fnamemodify(f, ':t:r'), 'name_prefix' : scope }
-		endfor
-
-		for f in s:Glob(paths, 'snippets/' . scope . '/' . trigger . '*/*.snippet')
-			let result[f] = {'exists': 1, 'type': 'snippet', 'name' : fnamemodify(f, ':t:r'),
-						\ 'trigger': fnamemodify(f, ':h:t'), 'name_prefix' : scope }
-		endfor
-
-		if !a:mustExist
-			for p in split(paths, ',')
-				let p .= '/snippets/' . scope . '.snippets'
-				let result[p] = get(result, p, {'exists': 0, 'type': 'snippets'})
-			endfor
-		endif
-
-	endfor
-	return result
-endfunction
-
 " should be moved to utils or such?
 function! snipMate#SetByPath(dict, trigger, path, snippet)
 	let d = a:dict
@@ -524,6 +457,36 @@ function! snipMate#SetByPath(dict, trigger, path, snippet)
 		let d[a:trigger] = {}
 	endif
 	let d[a:trigger][a:path] = a:snippet
+endfunction
+
+au SourceCmd *.snippet,*.snippets call s:source_snippet()
+
+function! s:info_from_filename(file)
+	let parts = split(fnamemodify(a:file, ':r'), '/')
+	let snipidx = len(parts) - index(reverse(copy(parts)), 'snippets') - 1
+	let rtp_prefix = join(parts[(snipidx -
+				\ (parts[snipidx - 1] == 'after' ? 3 : 2)):snipidx - 1], '/')
+	let trigger = get(parts, snipidx + 2, '')
+	let desc = get(parts, snipidx + 3, fnamemodify(a:file, ':t'))
+	return [rtp_prefix, trigger, desc]
+endfunction
+
+function! s:source_snippet()
+	let file = expand('<afile>:p')
+	let [rtp_prefix, trigger, desc] = s:info_from_filename(file)
+	if fnamemodify(file, ':e') == 'snippet'
+		call add(s:lookup_state.snips,
+					\ [trigger, join([rtp_prefix, s:lookup_state.scope, desc]),
+					\ join(readfile(file), "\n"), 0])
+	else
+		let [snips, extends] = s:CachedSnips(file)
+		for snip in snips
+			let snip[1] = join([rtp_prefix, s:lookup_state.scope,
+						\ empty(snip[1]) ? desc : snip[1]])
+		endfor
+		call extend(s:lookup_state.snips, snips)
+		call extend(s:lookup_state.extends, extends)
+	endif
 endfunction
 
 function! s:CachedSnips(file)
@@ -537,31 +500,44 @@ function! s:CachedSnips(file)
 	return s:cache[a:file].contents
 endfunction
 
+function! s:snippet_filenames(scope, trigger)
+	let mid = ['', '_*', '/*']
+	return join(map(extend(mid, map(filter(copy(mid), 'v:key != 1'),
+				\ "'/' . a:trigger . '*' . v:val")),
+				\ "'snippets/' . a:scope . v:val . '.snippet'"
+				\ . ". (v:key < 3 ? 's' : '')"))
+endfunction
+
 " default triggers based on paths
 function! snipMate#DefaultPool(scopes, trigger, result)
-	let extra_scopes = []
-	for [f,opts] in items(snipMate#GetSnippetFiles(1, a:scopes, a:trigger))
-		let opts.name_prefix = matchstr(f, '\v/\zs.{-}\ze/snippets') . ' ' . opts.name_prefix
-		if opts.type == 'snippets'
-			let [snippets, new_scopes] = s:CachedSnips(f)
-			call extend(extra_scopes, new_scopes)
-			for [trigger, name, contents] in snippets
-				if trigger =~ '\V\^' . escape(a:trigger, '\')
-					call snipMate#SetByPath(a:result, trigger,
-								\ opts.name_prefix . ' ' . name, contents)
-				endif
-			endfor
-		elseif opts.type == 'snippet'
-			call snipMate#SetByPath(a:result, opts.trigger,
-						\ opts.name_prefix . ' ' . opts.name, readfile(f))
-		else
-			throw "unexpected"
+	let scopes = a:scopes
+	let trigger = escape(a:trigger, "*[]?{}`'$")
+	let rtp_save = &rtp
+	let &rtp = join(g:snipMate.snippet_dirs, ',')
+	let s:lookup_state = {}
+	let s:lookup_state.trigger = trigger
+	let scopes_done = []
+	let s:lookup_state.snips = []
+
+	while !empty(scopes)
+		let scope = remove(scopes, 0)
+		let s:lookup_state.scope = scope
+		let s:lookup_state.extends = []
+
+		exec 'runtime!' s:snippet_filenames(scope, trigger)
+
+		call add(scopes_done, scope)
+		call extend(scopes, s:lookup_state.extends)
+		call filter(scopes, 'index(scopes_done, v:val) == -1')
+	endwhile
+
+	for [trigger, desc, contents] in s:lookup_state.snips
+		if trigger =~ '\V\^' . escape(a:trigger, '\')
+			call snipMate#SetByPath(a:result, trigger, desc, contents)
 		endif
 	endfor
 
-	if !empty(extra_scopes)
-		call snipMate#DefaultPool(extra_scopes, a:trigger, a:result)
-	endif
+	let &rtp = rtp_save
 endfunction
 
 " return a dict of snippets found in runtimepath matching trigger
