@@ -393,13 +393,14 @@ fun! snipMate#ReadSnippetsFile(file)
 			let content .= strpart(line, 1)."\n"
 			continue
 		elseif inSnip
-			call add(result, [trigger, name, content[:-2]])
+			call add(result, [trigger, name, content[:-2], bang])
 			let inSnip = 0
 		endif
 
 		if line[:6] == 'snippet'
 			let inSnip = 1
-			let trigger = strpart(line, 8)
+			let bang = (line[7] == '!')
+			let trigger = strpart(line, 8 + bang)
 			let name = ''
 			let space = stridx(trigger, ' ') + 1
 			if space " Process multi snip
@@ -451,9 +452,9 @@ fun! s:AddScopeAliases(list)
 endf
 
 " should be moved to utils or such?
-function! snipMate#SetByPath(dict, trigger, path, snippet)
+function! snipMate#SetByPath(dict, trigger, path, snippet, bang)
 	let d = a:dict
-	if !has_key(d, a:trigger)
+	if !has_key(d, a:trigger) || a:bang
 		let d[a:trigger] = {}
 	endif
 	let d[a:trigger][a:path] = a:snippet
@@ -531,9 +532,9 @@ function! snipMate#DefaultPool(scopes, trigger, result)
 		call filter(scopes, 'index(scopes_done, v:val) == -1')
 	endwhile
 
-	for [trigger, desc, contents] in s:lookup_state.snips
+	for [trigger, desc, contents, bang] in s:lookup_state.snips
 		if trigger =~ '\V\^' . escape(a:trigger, '\')
-			call snipMate#SetByPath(a:result, trigger, desc, contents)
+			call snipMate#SetByPath(a:result, trigger, desc, contents, bang)
 		endif
 	endfor
 
