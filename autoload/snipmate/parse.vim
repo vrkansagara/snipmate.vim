@@ -105,9 +105,9 @@ endfunction
 
 function! s:parser_expr() dict
     let str = join(self.text('`', 1))
-    let ret = string(eval(str))
+    let ret = eval(str)
     call self.same('`')
-    return ret
+    return type(ret) == type('') ? ret : string(ret)
 endfunction
 
 function! s:parser_text(...) dict
@@ -155,7 +155,7 @@ function! s:parser_parse(...) dict
             endif
         elseif self.same('`')
             let expr = self.expr()
-            if type(ret[-1]) == type('')
+            if !empty(ret) && type(ret[-1]) == type('')
                 let ret[-1] .= expr
             else
                 call add(ret, expr)
