@@ -288,7 +288,7 @@ function! s:state_proto.update_stops()
 				continue
 			endif
 
-			let changed = stop.line == curLine && stop.col > self.start_col
+			let changed = stop.line == curLine && stop.col > self.cur_stop.col
 			" Subtract changeLen from each tab stop that was after any of
 			" the current tab stop's placeholders.
 			for [lnum, col] in s:listize_mirror(self.old_mirrors)
