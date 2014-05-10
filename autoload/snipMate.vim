@@ -451,15 +451,6 @@ fun! s:AddScopeAliases(list)
   return keys(did)
 endf
 
-" should be moved to utils or such?
-function! snipMate#SetByPath(dict, trigger, path, snippet, bang)
-	let d = a:dict
-	if !has_key(d, a:trigger) || a:bang
-		let d[a:trigger] = {}
-	endif
-	let d[a:trigger][a:path] = a:snippet
-endfunction
-
 au SourceCmd *.snippet,*.snippets call s:source_snippet()
 
 function! s:info_from_filename(file)
@@ -468,26 +459,31 @@ function! s:info_from_filename(file)
 	let rtp_prefix = join(parts[(snipidx -
 				\ (parts[snipidx - 1] == 'after' ? 3 : 2)):snipidx - 1], '/')
 	let trigger = get(parts, snipidx + 2, '')
-	let desc = get(parts, snipidx + 3, fnamemodify(a:file, ':t'))
+	let desc = get(parts, snipidx + 3, get(g:snipMate, 'override', 0) ?
+				\ '' : fnamemodify(a:file, ':t'))
 	return [rtp_prefix, trigger, desc]
 endfunction
 
 function! s:source_snippet()
 	let file = expand('<afile>:p')
 	let [rtp_prefix, trigger, desc] = s:info_from_filename(file)
+	let new_snips = []
 	if fnamemodify(file, ':e') == 'snippet'
-		call add(s:lookup_state.snips,
-					\ [trigger, join([rtp_prefix, s:lookup_state.scope, desc]),
-					\ join(readfile(file), "\n"), 0])
+		call add(new_snips, [trigger, desc, join(readfile(file), "\n"), 0])
 	else
-		let [snips, extends] = s:CachedSnips(file)
-		for snip in snips
-			let snip[1] = join([rtp_prefix, s:lookup_state.scope,
-						\ empty(snip[1]) ? desc : snip[1]])
-		endfor
-		call extend(s:lookup_state.snips, snips)
+		let [snippets, extends] = s:CachedSnips(file)
+		let new_snips = deepcopy(snippets)
 		call extend(s:lookup_state.extends, extends)
 	endif
+	for snip in new_snips
+		if get(g:snipMate, 'override', 0)
+			let snip[1] = join([s:lookup_state.scope, snip[1]])
+		else
+			let snip[1] = join([s:lookup_state.scope, rtp_prefix,
+						\ empty(snip[1]) ? desc : snip[1]])
+		endif
+	endfor
+	call extend(s:lookup_state.snips, new_snips)
 endfunction
 
 function! s:CachedSnips(file)
@@ -509,15 +505,21 @@ function! s:snippet_filenames(scope, trigger)
 				\ . ". (v:key < 3 ? 's' : '')"))
 endfunction
 
+function! snipMate#SetByPath(dict, trigger, path, snippet, bang)
+	let d = a:dict
+	if !has_key(d, a:trigger) || a:bang
+		let d[a:trigger] = {}
+	endif
+	let d[a:trigger][a:path] = a:snippet
+endfunction
+
 " default triggers based on paths
 function! snipMate#DefaultPool(scopes, trigger, result)
-	let scopes = a:scopes
-	let trigger = escape(a:trigger, "*[]?{}`'$")
+	let scopes = s:AddScopeAliases(a:scopes)
+	let scopes_done = []
 	let rtp_save = &rtp
 	let &rtp = join(g:snipMate.snippet_dirs, ',')
 	let s:lookup_state = {}
-	let s:lookup_state.trigger = trigger
-	let scopes_done = []
 	let s:lookup_state.snips = []
 
 	while !empty(scopes)
@@ -525,7 +527,7 @@ function! snipMate#DefaultPool(scopes, trigger, result)
 		let s:lookup_state.scope = scope
 		let s:lookup_state.extends = []
 
-		exec 'runtime!' s:snippet_filenames(scope, trigger)
+		exec 'runtime!' s:snippet_filenames(scope, escape(a:trigger, "*[]?{}`'$"))
 
 		call add(scopes_done, scope)
 		call extend(scopes, s:lookup_state.extends)
