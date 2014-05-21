@@ -121,7 +121,9 @@ function! s:parser_text(...) dict
 
     while self.pos < self.len
         if self.same('\')
-            let val .= self.next
+            if self.next != "\n"
+                let val .= self.next
+            endif
             call self.advance()
         elseif self.next =~# till
             break
