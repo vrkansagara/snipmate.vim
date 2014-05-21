@@ -148,24 +148,29 @@ function! s:parser_parse(...) dict
         if self.same('$')
             let var = self.var()
             if var[0] is# 'VISUAL'
-                call add(ret, s:visual_placeholder(var))
+                let add_to = s:visual_placeholder(var)
+                if !empty(ret) && type(ret[-1]) == type('')
+                    let ret[-1] .= add_to
+                else
+                    call add(ret, add_to)
+                endif
             elseif var[0] >= 0
                 call add(ret, var)
                 call self.add_var(var)
             endif
         elseif self.same('`')
-            let expr = self.expr()
+            let add_to = self.expr()
             if !empty(ret) && type(ret[-1]) == type('')
-                let ret[-1] .= expr
+                let ret[-1] .= add_to
             else
-                call add(ret, expr)
+                call add(ret, add_to)
             endif
         else
             let text = a:0 ? self.text(a:1) : self.text()
-            if exists('expr')
+            if exists('add_to')
                 let ret[-1] .= text[0]
                 call remove(text, 0)
-                unlet expr
+                unlet add_to
             endif
             call extend(ret, text)
         endif
@@ -184,12 +189,12 @@ function! s:visual_placeholder(var)
     let sub = get(dict, 'sub', '')
     let flags = get(dict, 'flags', '')
     let ret = substitute(get(b:, 'snipmate_visual', ''), pat, sub, flags)
-    unlet! b:snipmate_visual
     return ret
 endfunction
 
 function! snipmate#parse#snippet(text)
     let parser = s:new_parser(a:text)
     let result = parser.parse()
+    unlet! b:snipmate_visual
     return [result, parser.vars]
 endfunction
