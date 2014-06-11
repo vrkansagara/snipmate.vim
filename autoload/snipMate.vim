@@ -417,7 +417,7 @@ fun! snipMate#ReadSnippetsFile(file)
 endf
 
 function! s:GetScopes()
-	let ret = exists('b:snipMate_scope_aliases') ? copy(b:snipMate.scope_aliases) : {}
+	let ret = exists('b:snipMate.scope_aliases') ? copy(b:snipMate.scope_aliases) : {}
 	let global = get(g:snipMate, 'scope_aliases', {})
 	for alias in keys(global)
 		if has_key(ret, alias)
