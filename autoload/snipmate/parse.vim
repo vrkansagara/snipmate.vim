@@ -18,9 +18,10 @@ function! s:new_parser(text)
     let ret = copy(s:parser_proto)
     let ret.input = a:text
     let ret.len = strlen(ret.input)
-    let ret.pos = 0
-    let ret.next = ret.input[ret.pos]
+    let ret.pos = -1
+    let ret.value = []
     let ret.vars = {}
+    call ret.advance()
     return ret
 endfunction
 
@@ -145,7 +146,7 @@ function! s:parser_text(...) dict
 endfunction
 
 function! s:parser_parse(...) dict
-    let ret = []
+    let ret = a:0 ? [] : self.value
     while self.pos < self.len
         if self.same('$')
             let var = self.var()
@@ -196,7 +197,7 @@ endfunction
 
 function! snipmate#parse#snippet(text)
     let parser = s:new_parser(a:text)
-    let result = parser.parse()
+    call parser.parse()
     unlet! b:snipmate_visual
-    return [result, parser.vars]
+    return [parser.value, parser.vars]
 endfunction
