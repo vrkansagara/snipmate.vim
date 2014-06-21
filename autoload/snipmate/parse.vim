@@ -150,16 +150,18 @@ function! s:parser_parse(...) dict
     while self.pos < self.len
         if self.same('$')
             let var = self.var()
-            if var[0] is# 'VISUAL'
-                let add_to = s:visual_placeholder(var)
-                if !empty(ret) && type(ret[-1]) == type('')
-                    let ret[-1] .= add_to
-                else
-                    call add(ret, add_to)
+            if !empty(var)
+                if var[0] is# 'VISUAL'
+                    let add_to = s:visual_placeholder(var)
+                    if !empty(ret) && type(ret[-1]) == type('')
+                        let ret[-1] .= add_to
+                    else
+                        call add(ret, add_to)
+                    endif
+                elseif var[0] >= 0
+                    call add(ret, var)
+                    call self.add_var(var)
                 endif
-            elseif var[0] >= 0
-                call add(ret, var)
-                call self.add_var(var)
             endif
         elseif self.same('`')
             let add_to = self.expr()
