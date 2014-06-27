@@ -453,11 +453,7 @@ fun! s:AddScopeAliases(list)
   return keys(did)
 endf
 
-if v:version >= 704
-	function! s:Glob(path, expr)
-		return split(globpath(a:path, a:expr), "\n")
-	endfunction
-else
+if v:version < 704 || has('win32')
 	function! s:Glob(path, expr)
 		let res = []
 		for p in split(a:path, ',')
@@ -467,6 +463,10 @@ else
 			endif
 		endfor
 		return filter(res, 'filereadable(v:val)')
+	endfunction
+else
+	function! s:Glob(path, expr)
+		return split(globpath(a:path, a:expr), "\n")
 	endfunction
 endif
 
