@@ -386,12 +386,16 @@ endfunction
 " returns list of
 " ['triggername', 'name', 'contents']
 " if triggername is not set 'default' is assumed
+" TODO: better error checking
 fun! snipMate#ReadSnippetsFile(file)
 	let result = []
 	let new_scopes = []
 	if !filereadable(a:file) | return [result, new_scopes] | endif
 	let inSnip = 0
+	let line_no = 0
 	for line in readfile(a:file) + ["\n"]
+		let line_no += 1
+
 		if inSnip && (line[0] == "\t" || line == '')
 			let content .= strpart(line, 1)."\n"
 			continue
@@ -410,6 +414,10 @@ fun! snipMate#ReadSnippetsFile(file)
 				let trigger = strpart(trigger, 0, space - 1)
 			endif
 			let content = ''
+			if trigger =~ '^\s*$' " discard snippets with empty triggers
+				echom 'Invalid snippet in' a:file 'near line' line_no
+				let inSnip = 0
+			endif
 		elseif line[:6] == 'extends'
 			call extend(new_scopes, map(split(strpart(line, 8)),
 						\ "substitute(v:val, ',*$', '', '')"))
@@ -521,7 +529,7 @@ function! snipMate#GetSnippetFiles(mustExist, scopes, trigger)
 endfunction
 
 " should be moved to utils or such?
-function! snipMate#SetByPath(dict, trigger, path, snippet)
+function! snipMate#SetByPath(dict, trigger, path, snippet) abort
 	let d = a:dict
 	if !has_key(d, a:trigger)
 		let d[a:trigger] = {}
