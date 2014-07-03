@@ -245,13 +245,12 @@ function! s:state_proto.jump_stop(backwards)
 	" Loop over the snippet when going backwards from the beginning
 	if self.stop_no < 0 | let self.stop_no = self.stop_count - 1 | endif
 
-	if self.stop_no == self.stop_count
-		call self.remove()
-		return ''
-	endif
-
 	call self.set_stop(self.stop_no)
-	return self.select_word()
+	let ret = self.select_word()
+	if self.stop_no == self.stop_count - 1
+		call self.remove()
+	endif
+	return ret
 endfunction
 
 " Updates tab stops/vars
