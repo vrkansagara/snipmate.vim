@@ -138,6 +138,7 @@ fun! s:ProcessSnippet(snip)
 	" (e.g. "${#:foo}" becomes "${:foo}foo").
 	" This helps tell the position of the tab stops later.
 	let snippet = substitute(snippet, esc_bslash . '\$\({\d\+:\(.\{-}\)}\|{\d\+}\)', s:d . '\1\2', 'g')
+	let snippet = substitute(snippet, esc_bslash . '\$\(\d\+\)', s:d . '\1', 'g')
 	let snippet = substitute(snippet, esc_bslash . '\\\$', '$', 'g')
 	let snippet = substitute(snippet, '\\\\', "\\", 'g')
 
