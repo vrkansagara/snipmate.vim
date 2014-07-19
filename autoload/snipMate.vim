@@ -197,7 +197,7 @@ endf
 fun! s:BuildTabStops(snip, lnum, col, indent)
 	let snipPos = []
 	let i = 1
-	let withoutVars = substitute(a:snip, '$\d\+', '', 'g')
+	let withoutVars = substitute(a:snip, s:d . '\d\+', '', 'g')
 	while a:snip =~ s:d.'{'.i
 		let beforeTabStop = matchstr(withoutVars, '^.*\ze'.s:d .'{'.i.'\D')
 		let withoutOthers = substitute(withoutVars, ''.s:d .'{\('.i.'\D\)\@!\d\+.\{-}}', '', 'g')
