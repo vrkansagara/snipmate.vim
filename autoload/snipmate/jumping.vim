@@ -16,11 +16,10 @@ endfunction
 function! s:state_remove() dict
 	" Remove all autocmds in group snipmate_changes in the current buffer
 	unlet! b:snip_state
-	au! snipmate_changes * <buffer>
+	silent! au! snipmate_changes * <buffer>
 endfunction
 
-" Update state information to correspond to the given tab stop
-function! s:state_set_stop(backwards) dict
+function! s:state_find_next_stop(backwards) dict
 	let self.stop_no += a:backwards? -1 : 1
 	while !has_key(self.stops, self.stop_no)
 		if self.stop_no == self.stop_count
@@ -31,6 +30,11 @@ function! s:state_set_stop(backwards) dict
 		endif
 		let self.stop_no += a:backwards? -1 : 1
 	endwhile
+endfunction
+
+" Update state information to correspond to the given tab stop
+function! s:state_set_stop(backwards) dict
+	call self.find_next_stop(a:backwards)
 	let self.cur_stop    = self.stops[self.stop_no]
 	let self.stop_len    = len(snipMate#placeholder_str(self.stop_no, self.stops))
 	let self.start_col   = self.cur_stop.col
@@ -54,9 +58,6 @@ function! s:state_jump_stop(backwards) dict
 	" the CursorMovedI event
 	call self.update_changes()
 
-	" Update stop and mirror locations
-	call self.update_stops()
-
 	" Store placeholder/location changes
 	let self.cur_stop.col = self.start_col
 	if self.changed
@@ -72,62 +73,15 @@ function! s:state_remove_nested(...) dict
 	let id = a:0 ? a:1 : self.stop_no
 	for i in self.stops[id].placeholder
 		if type(i) == type([])
-			if len(i) > 1 && type(i[1]) != type({})
+			if type(i[1]) != type({})
 				call self.remove_nested(i[0])
 				call remove(self.stops, i[0])
 			else
-				call filter(self.stops[i[0]].mirrors, 'v:val is i')
+				call filter(self.stops[i[0]].mirrors, 'v:val isnot i[1]')
 			endif
 		endif
 		unlet i " Avoid E706
 	endfor
-endfunction
-
-" Update tab stop/mirror locations to account for mirror changes
-function! s:state_update_stops() dict
-	let changeLen = self.end_col - self.stop_len - self.start_col
-	let curLine = line('.')
-	if changeLen != 0
-		" Filter the zeroth stop because it's duplicated as the last
-		for stop in values(filter(copy(self.stops), 'v:key != 0'))
-			if stop is self.cur_stop
-				continue
-			endif
-
-			let changed = stop.line == curLine && stop.col > self.cur_stop.col
-			" Subtract changeLen from each tab stop that was after any of
-			" the current tab stop's placeholders.
-			for [lnum, col] in s:listize_mirror(self.old_mirrors)
-				if lnum > stop.line
-					break
-				endif
-				if stop.line == lnum
-							\ && (stop.col > col
-							\ || (stop.placeholder == [''] && stop.col == col))
-					let changed += 1
-				endif
-			endfor
-			let stop.col += changeLen * changed
-
-			" Do the same to any placeholders in the other tab stops.
-			for mirror in get(stop, 'mirrors', [])
-				let changed = mirror.line == curLine && mirror.col > self.start_col
-				if changed && mirror.col < self.start_col + self.cur_stop.col
-					call remove(stop.mirrors, index(stop.mirrors, mirror))
-					continue
-				endif
-				for [lnum, col] in s:listize_mirror(self.old_mirrors)
-					if lnum > mirror.line
-						break
-					endif
-					if mirror.line == lnum && mirror.col > col
-						let changed += 1
-					endif
-				endfor
-				let mirror.col += changeLen * changed
-			endfor
-		endfor
-	endif
 endfunction
 
 " Select the placeholder for the current tab stop
@@ -152,7 +106,10 @@ function! s:state_update_changes() dict
 
 	if line('.') != self.cur_stop.line || col < self.start_col || col > self.end_col
 		return self.remove()
-	elseif !empty(self.mirrors)
+	endif
+
+	call self.update(self.cur_stop, change_len)
+	if !empty(self.mirrors)
 		call self.update_mirrors(change_len)
 	endif
 
@@ -170,27 +127,7 @@ function! s:state_update_mirrors(change) dict
 	let i = 0
 
 	for mirror in self.mirrors
-		if changeLen != 0
-			let start = self.start_col
-			if mirror.line == curLine && mirror.col <= start
-				let self.start_col += changeLen
-				let self.end_col += changeLen
-			endif
-			for nPos in self.mirrors[(i):]
-				" This list is in ascending order, so quit if we've gone too far.
-				if nPos.line > mirror.line
-					break
-				endif
-				if nPos.line == mirror.line && nPos.col > mirror.col
-					let nPos.col += changeLen
-				endif
-			endfor
-			if mirror.line == curLine && mirror.col > start
-				let mirror.col += changeLen
-			endif
-			let i += 1
-		endif
-
+		call self.update(mirror, changeLen)
 		" Split the line into three parts: the mirror, what's before it, and
 		" what's after it. Then combine them using the new mirror string.
 		" Subtract one to go from column index to byte index
@@ -208,9 +145,47 @@ function! s:state_update_mirrors(change) dict
 	endif
 endfunction
 
+function! s:state_find_update_objects(item) dict
+	let item = a:item
+	let item.update_objects = []
+
+	" Filter the zeroth stop because it's duplicated as the last
+	for stop in values(filter(copy(self.stops), 'v:key != 0'))
+		if stop.line == item.line && stop.col > item.col
+			call add(item.update_objects, stop)
+		endif
+
+		for mirror in get(stop, 'mirrors', [])
+			if mirror.line == item.line && mirror.col > item.col
+				call add(item.update_objects, mirror)
+			endif
+		endfor
+	endfor
+
+	return item.update_objects
+endfunction
+
+function! s:state_update(item, change_len) dict
+	let item = a:item
+	if exists('item.update_objects')
+		let to_update = item.update_objects
+	else
+		let to_update = self.find_update_objects(a:item)
+		let item.update_objects = to_update
+	endif
+
+	for obj in to_update
+		let obj.col += a:change_len
+		if obj is self.cur_stop
+			let self.start_col += a:change_len
+			let self.end_col += a:change_len
+		endif
+	endfor
+endfunction
+
 call extend(s:state_proto, snipmate#util#add_methods(s:sfile(), 'state',
 			\ [ 'remove', 'set_stop', 'jump_stop', 'remove_nested',
-			\ 'update_stops', 'select_word', 'update_changes',
-			\ 'update_mirrors' ]), 'error')
+			\ 'select_word', 'update_changes', 'update_mirrors',
+			\ 'find_next_stop', 'find_update_objects', 'update' ]), 'error')
 
 " vim:noet:sw=4:ts=4:ft=vim
