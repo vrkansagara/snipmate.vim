@@ -22,20 +22,20 @@ describe 'snippet parser'
 
     it 'gathers references to each instance of each stop id'
         let [snip, b:stops] = Parse('x$1x${2:x$1x}x$1x${1/a/b}x$VISUALx')
-        function! b:instance_found(list)
+        function! InstanceFound(list)
             return !empty(filter(copy(b:stops[a:list[0]].instances),
                         \ 'v:val is a:list'))
         endfunction
-        function! b:check_list(list)
+        function! CheckList(list)
             for item in a:list
                 if type(item) == type([])
-                    Expect b:instance_found(item) to_be_true
-                    call b:check_list(item)
+                    Expect InstanceFound(item) to_be_true
+                    call CheckList(item)
                 endif
                 unlet item " E732
             endfor
         endfunction
-        call b:check_list(snip)
+        call CheckList(snip)
     end
 
     it 'parses mirror substitutions ${n/pat/sub} as [n, {...}]'
