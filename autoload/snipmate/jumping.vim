@@ -1,13 +1,5 @@
-" The next two functions were essentially taken from Fugitive
-" <https://github.com/tpope/vim-fugitive>
-function! s:function(name) abort
-    return function(matchstr(expand('<sfile>'), '<SNR>\d\+_') . a:name)
-endfunction
-
-function! s:add_methods(namespace, method_names) abort
-    for name in a:method_names
-        let s:{a:namespace}_proto[name] = s:function(a:namespace . '_' . name)
-    endfor
+function! s:sfile()
+	return expand('<sfile>')
 endfunction
 
 let s:state_proto = {}
@@ -216,8 +208,9 @@ function! s:state_update_mirrors(change) dict
 	endif
 endfunction
 
-call s:add_methods('state', [ 'remove', 'set_stop', 'jump_stop',
-			\ 'remove_nested', 'update_stops', 'select_word', 'update_changes',
-			\ 'update_mirrors' ])
+call extend(s:state_proto, snipmate#util#add_methods(s:sfile(), 'state',
+			\ [ 'remove', 'set_stop', 'jump_stop', 'remove_nested',
+			\ 'update_stops', 'select_word', 'update_changes',
+			\ 'update_mirrors' ]), 'error')
 
 " vim:noet:sw=4:ts=4:ft=vim

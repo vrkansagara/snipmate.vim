@@ -1,15 +1,7 @@
 " Snippet definition parsing code
 
-" The next two functions were essentially taken from Fugitive
-" <https://github.com/tpope/vim-fugitive>
-function! s:function(name) abort
-    return function(matchstr(expand('<sfile>'), '<SNR>\d\+_') . a:name)
-endfunction
-
-function! s:add_methods(namespace, method_names) abort
-    for name in a:method_names
-        let s:{a:namespace}_proto[name] = s:function(a:namespace . '_' . name)
-    endfor
+function! s:sfile()
+    return expand('<sfile>')
 endfunction
 
 let s:parser_proto = {}
@@ -186,7 +178,9 @@ function! s:parser_parse(...) dict
     return ret
 endfunction
 
-call s:add_methods('parser', [ 'advance', 'same', 'id', 'add_var', 'var', 'varend', 'placeholder', 'subst', 'expr', 'text', 'parse' ])
+call extend(s:parser_proto, snipmate#util#add_methods(s:sfile(), 'parser',
+            \ [ 'advance', 'same', 'id', 'add_var', 'var', 'varend',
+            \ 'placeholder', 'subst', 'expr', 'text', 'parse' ]), 'error')
 
 function! s:visual_placeholder(var)
     let dict = get(a:var, 1, {})
