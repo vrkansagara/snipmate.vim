@@ -177,6 +177,8 @@ tab stop, >
         :imap <C-J> <Plug>snipMateNextOrTrigger
         :smap <C-J> <Plug>snipMateNextOrTrigger
 
+Note: The noremap variants of the map commands must NOT be used.
+
 The list of possible <Plug> mappings is as follows:
 
 <Plug>snipMateNextOrTrigger     Default: <Tab>          Mode: Insert, Select
