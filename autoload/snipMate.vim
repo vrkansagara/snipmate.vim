@@ -111,7 +111,8 @@ fun! s:ProcessSnippet(snip)
 	else
 		let visual = ''
 	endif
-	let snippet = substitute(snippet,'{VISUAL}', escape(visual,'%\'), 'g')
+	let snippet = substitute(snippet, '\n\(\t\+\).\{-\}\zs{VISUAL}',
+				\ substitute(escape(visual, '%\'), "\n", "\n\\\\1", 'g'), 'g')
 
 	" Evaluate eval (`...`) expressions.
 	" Backquotes prefixed with a backslash "\" are ignored.
