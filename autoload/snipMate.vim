@@ -106,7 +106,7 @@ fun! s:ProcessSnippet(snip)
 	let esc_bslash = '\%(\\\@<!\%(\\\\\)*\)\@<='
 
 	if exists('b:snipmate_content_visual')
-		let visual = b:snipmate_content_visual
+		let visual = substitute(b:snipmate_content_visual, "\n$", '', '')
 		unlet b:snipmate_content_visual
 	else
 		let visual = ''
