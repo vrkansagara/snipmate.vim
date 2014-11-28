@@ -20,24 +20,32 @@ endf
 
 let s:cache = {}
 
-function! snipMate#expandSnip(snip, col)
+function! snipMate#expandSnip(snip, version, col)
 	let lnum = line('.')
 	let col = a:col
 	let line = getline(lnum)
 	let indent = match(line, '\S\|$') + 1
 	let b:snip_state = snipmate#jumping#state()
-	let [snippet, b:snip_state.stops] = snipmate#parse#snippet(a:snip)
 
+	if a:version == 1
+		let [snippet, b:snip_state.stops] = snipmate#parse#snippet(a:snip)
+		" Build stop/mirror info
+		let b:snip_state.stop_count = s:build_stops(snippet, b:snip_state.stops, lnum, col, indent)
+		let snipLines = snipMate#sniplist_str(snippet, b:snip_state.stops)
+	else
+		let snippet = snipmate#legacy#process_snippet(a:snip)
+		let [b:snip_state.stops, b:snip_state.stop_count] = snipmate#legacy#build_stops(snippet, lnum, col - indent, indent)
+		let snipLines = split(substitute(snippet, printf('%s\d\+\|%s{\d\+.\{-}}',
+					\ g:snipmate#legacy#sigil, g:snipmate#legacy#sigil), '', 'g'), "\n", 1)
+	endif
+
+	" where this go
 	" Abort if the snippet is empty
 	if empty(snippet)
 		return ''
 	endif
 
-	" Build stop/mirror info
-	let b:snip_state.stop_count = s:build_stops(snippet, b:snip_state.stops, lnum, col, indent)
-
 	" Expand snippet onto current position
-	let snipLines = snipMate#sniplist_str(snippet, b:snip_state.stops)
 	let afterCursor = strpart(line, col - 1)
 	" Keep text after the cursor
 	if afterCursor != "\t" && afterCursor != ' '
@@ -201,12 +209,14 @@ fun! snipMate#ReadSnippetsFile(file)
 	let new_scopes = []
 	if !filereadable(a:file) | return [result, new_scopes] | endif
 	let inSnip = 0
+	let snipversion = get(g:snipMate, 'snippet_version', 0)
 	for line in readfile(a:file) + ["\n"]
 		if inSnip && (line[0] == "\t" || line == '')
 			let content .= strpart(line, 1)."\n"
 			continue
 		elseif inSnip
-			call add(result, [trigger, name == '' ? 'default' : name, content[:-2]])
+			call add(result, [trigger, name == '' ? 'default' : name,
+						\     content[:-2], snipversion])
 			let inSnip = 0
 		endif
 
@@ -223,6 +233,8 @@ fun! snipMate#ReadSnippetsFile(file)
 		elseif line[:6] == 'extends'
 			call extend(new_scopes, map(split(strpart(line, 8)),
 						\ "substitute(v:val, ',*$', '', '')"))
+		elseif line[:6] == 'version'
+			let snipversion = +strpart(line, 8)
 		endif
 	endfor
 	return [result, new_scopes]
@@ -358,15 +370,16 @@ function! snipMate#DefaultPool(scopes, trigger, result)
 		if opts.type == 'snippets'
 			let [snippets, new_scopes] = s:CachedSnips(f)
 			call extend(extra_scopes, new_scopes)
-			for [trigger, name, contents] in snippets
+			for [trigger, name, contents, snipversion] in snippets
 				if trigger =~ '\V\^' . escape(a:trigger, '\')
 					call snipMate#SetByPath(a:result, trigger,
-								\ opts.name_prefix . ' ' . name, contents)
+								\ opts.name_prefix . ' ' . name, [contents, snipversion])
 				endif
 			endfor
 		elseif opts.type == 'snippet'
 			call snipMate#SetByPath(a:result, opts.trigger,
-						\ opts.name_prefix . ' ' . opts.name, readfile(f))
+						\ opts.name_prefix . ' ' . opts.name,
+						\ [join(readfile(f), "\n"), get(g:snipMate, 'snippet_version', 0)])
 		else
 			throw "unexpected"
 		endif
@@ -594,19 +607,12 @@ function! snipMate#TriggerSnippet(...)
 		let snippet = ''
 	else
 		let [trigger, snippetD] = list[0]
-
-		let s = s:ChooseSnippet(snippetD)
-		if type(s) == type([])
-			let snippet = join(s, "\n")
-		else
-			let snippet = s
-		end
-
+		let snippet = s:ChooseSnippet(snippetD)
 		" Before expanding snippet, create new undo point |i_CTRL-G|
 		let &undolevels = &undolevels
 		let col = col('.') - len(trigger)
 		sil exe 's/\V'.escape(trigger, '/\.').'\%#//'
-		return snipMate#expandSnip(snippet, col)
+		return snipMate#expandSnip(snippet[0], snippet[1], col)
 	endif
 
 	" should allow other plugins to register hooks instead (duplicate code)

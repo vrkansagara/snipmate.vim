@@ -36,7 +36,9 @@ endfunction
 function! s:state_set_stop(backwards) dict
 	call self.find_next_stop(a:backwards)
 	let self.cur_stop    = self.stops[self.stop_no]
-	let self.stop_len    = len(snipMate#placeholder_str(self.stop_no, self.stops))
+	let self.stop_len = (type(self.cur_stop.placeholder) == type(0))
+				\ ? self.cur_stop.placeholder
+				\ : len(snipMate#placeholder_str(self.stop_no, self.stops))
 	let self.start_col   = self.cur_stop.col
 	let self.end_col     = self.start_col + self.stop_len
 	let self.mirrors     = get(self.cur_stop, 'mirrors', [])
@@ -62,6 +64,7 @@ function! s:state_jump_stop(backwards) dict
 	let self.cur_stop.col = self.start_col
 	if self.changed
 		call self.remove_nested()
+		unlet! self.cur_stop.placeholder " avoid type error for old parsing version
 		let self.cur_stop.placeholder = [strpart(getline('.'),
 					\ self.start_col - 1, self.end_col - self.start_col)]
 	endif
@@ -71,17 +74,19 @@ endfunction
 
 function! s:state_remove_nested(...) dict
 	let id = a:0 ? a:1 : self.stop_no
-	for i in self.stops[id].placeholder
-		if type(i) == type([])
-			if type(i[1]) != type({})
-				call self.remove_nested(i[0])
-				call remove(self.stops, i[0])
-			else
-				call filter(self.stops[i[0]].mirrors, 'v:val isnot i[1]')
+	if type(self.stops[id].placeholder) == type([])
+		for i in self.stops[id].placeholder
+			if type(i) == type([])
+				if type(i[1]) != type({})
+					call self.remove_nested(i[0])
+					call remove(self.stops, i[0])
+				else
+					call filter(self.stops[i[0]].mirrors, 'v:val isnot i[1]')
+				endif
 			endif
-		endif
-		unlet i " Avoid E706
-	endfor
+			unlet i " Avoid E706
+		endfor
+	endif
 endfunction
 
 " Select the placeholder for the current tab stop
