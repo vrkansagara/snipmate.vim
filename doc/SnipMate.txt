@@ -151,6 +151,15 @@ g:snipMate.snippet_version
                                 value of this option is also used for all
                                 .snippet files.
 
+g:snipMate.override
+                                As detailed below, when two snippets with the
+                                same name and description are loaded, both are
+                                kept and differentiated by the location of the
+                                file they were in. When this option is enabled
+                                (set to 1), the snippet originating in the
+                                last loaded file is kept, similar to how Vim
+                                maps and other settings work.
+
 g:snipMate['no_match_completion_feedkeys_chars']
                                 A string inserted when no match for a trigger
                                 is found. By default a tab is inserted
@@ -231,9 +240,15 @@ looks something like: >
         more expanded text
 
 <                                                         *SnipMate-multisnip*
-The description is optional. If it is left out and a second snippet inside the
-same .snippets file uses the same trigger, the second one will overwrite the
-first. Otherwise multisnip is used.
+The description is optional. If it is left out, the description "default" is
+used. When two snippets in the same scope have the same name and the same
+description, SnipMate will try to preserve both. The g:snipMate.override
+option disables this, in favor of keeping the last-loaded snippet. This can be
+overridden on a per-snippet basis by defining the snippet with a bang (!): >
+
+    snippet! trigger optional description
+        expanded text
+        more expanded text
 
 Note: Hard tabs in the expansion text are required. When the snippet is
 expanded in the text and 'expandtab' is set, each tab will be replaced with

@@ -92,6 +92,13 @@ does `:SnipMateLoadScope rails` when editing a Rails project for example.
     * The stop jumping code has been updated
     * Tests have been added for the jumping code and the new parser
 
+* The override branch has been merged
+    * The g:snipMate.override option is added. When enabled, if two snippets
+      share the same name, the later-loaded one is kept and the other discarded
+    * Override behavior can be enabled on a per-snippet basis with a bang (!) in
+      the snippet file
+    * Otherwise, SnipMate tries to preserve all snippets loaded
+
 ### 0.87 - 2014-01-04 ###
 
 * Stop indenting empty lines when expanding snippets

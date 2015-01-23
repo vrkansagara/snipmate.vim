@@ -215,14 +215,15 @@ fun! snipMate#ReadSnippetsFile(file)
 			let content .= strpart(line, 1)."\n"
 			continue
 		elseif inSnip
-			call add(result, [trigger, name == '' ? 'default' : name,
-						\     content[:-2], snipversion])
+			call add(result, [trigger, name,
+						\     content[:-2], bang, snipversion])
 			let inSnip = 0
 		endif
 
 		if line[:6] == 'snippet'
 			let inSnip = 1
-			let trigger = strpart(line, 8)
+			let bang = (line[7] == '!')
+			let trigger = strpart(line, 8 + bang)
 			let name = ''
 			let space = stridx(trigger, ' ') + 1
 			if space " Process multi snip
@@ -279,80 +280,40 @@ fun! s:AddScopeAliases(list)
   return keys(did)
 endf
 
-if v:version < 704 || has('win32')
-	function! s:Glob(path, expr)
-		let res = []
-		for p in split(a:path, ',')
-			let h = split(fnamemodify(a:expr, ':h'), '/')[0]
-			if isdirectory(p . '/' . h)
-				call extend(res, split(glob(p . '/' . a:expr), "\n"))
-			endif
-		endfor
-		return filter(res, 'filereadable(v:val)')
-	endfunction
-else
-	function! s:Glob(path, expr)
-		return split(globpath(a:path, a:expr), "\n")
-	endfunction
-endif
+au SourceCmd *.snippet,*.snippets call s:source_snippet()
 
-" returns dict of
-" { path: { 'type': one of 'snippet' 'snippets',
-"           'exists': 1 or 0
-"           " for single snippet files:
-"           'name': name of snippet
-"           'trigger': trigger of snippet
-"         }
-" }
-" use mustExist = 1 to return existing files only
-"
-"     mustExist = 0 is used by OpenSnippetFiles
-function! snipMate#GetSnippetFiles(mustExist, scopes, trigger)
-	let paths = join(funcref#Call(g:snipMate.snippet_dirs), ',')
-	let result = {}
-	let scopes = s:AddScopeAliases(a:scopes)
-	let trigger = escape(a:trigger, "*[]?{}`'$")
-
-	" collect existing files
-	for scope in scopes
-
-		for f in s:Glob(paths, 'snippets/' . scope . '.snippets') +
-					\ s:Glob(paths, 'snippets/' . scope . '_*.snippets') +
-					\ s:Glob(paths, 'snippets/' . scope . '/*.snippets')
-			let result[f] = { 'exists' : 1, 'type' : 'snippets',
-						\ 'name_prefix' : fnamemodify(f, ':t:r') }
-		endfor
-
-		" We check for trigger* in the next two loops. In the case of an exact
-		" match, that'll be handled in snipMate#GetSnippetsForWordBelowCursor.
-		for f in s:Glob(paths, 'snippets/' . scope . '/' . trigger . '*.snippet')
-			let result[f] = {'exists': 1, 'type': 'snippet', 'name': 'default',
-						\ 'trigger': fnamemodify(f, ':t:r'), 'name_prefix' : scope }
-		endfor
-
-		for f in s:Glob(paths, 'snippets/' . scope . '/' . trigger . '*/*.snippet')
-			let result[f] = {'exists': 1, 'type': 'snippet', 'name' : fnamemodify(f, ':t:r'),
-						\ 'trigger': fnamemodify(f, ':h:t'), 'name_prefix' : scope }
-		endfor
-
-		if !a:mustExist
-			for p in split(paths, ',')
-				let p .= '/snippets/' . scope . '.snippets'
-				let result[p] = get(result, p, {'exists': 0, 'type': 'snippets'})
-			endfor
-		endif
-
-	endfor
-	return result
+function! s:info_from_filename(file)
+	let parts = split(fnamemodify(a:file, ':r'), '/')
+	let snipidx = len(parts) - index(reverse(copy(parts)), 'snippets') - 1
+	let rtp_prefix = join(parts[(snipidx -
+				\ (parts[snipidx - 1] == 'after' ? 3 : 2)):snipidx - 1], '/')
+	let trigger = get(parts, snipidx + 2, '')
+	let desc = get(parts, snipidx + 3, get(g:snipMate, 'override', 0) ?
+				\ '' : fnamemodify(a:file, ':t'))
+	return [rtp_prefix, trigger, desc]
 endfunction
 
-" should be moved to utils or such?
-function! snipMate#SetByPath(dict, trigger, path, snippet) abort
-	let d = a:dict
-	if !has_key(d, a:trigger)
-		let d[a:trigger] = {}
+function! s:source_snippet()
+	let file = expand('<afile>:p')
+	let [rtp_prefix, trigger, desc] = s:info_from_filename(file)
+	let new_snips = []
+	if fnamemodify(file, ':e') == 'snippet'
+		call add(new_snips, [trigger, desc, join(readfile(file), "\n"), 0,
+					\ get(g:snipMate, 'snippet_version', 0)])
+	else
+		let [snippets, extends] = s:CachedSnips(file)
+		let new_snips = deepcopy(snippets)
+		call extend(s:lookup_state.extends, extends)
 	endif
-	let d[a:trigger][a:path] = a:snippet
+	for snip in new_snips
+		if get(g:snipMate, 'override', 0)
+			let snip[1] = join([s:lookup_state.scope, snip[1]])
+		else
+			let snip[1] = join([s:lookup_state.scope, rtp_prefix,
+						\ empty(snip[1]) ? desc : snip[1]])
+		endif
+	endfor
+	call extend(s:lookup_state.snips, new_snips)
 endfunction
 
 function! s:CachedSnips(file)
@@ -366,32 +327,50 @@ function! s:CachedSnips(file)
 	return s:cache[a:file].contents
 endfunction
 
+function! s:snippet_filenames(scope, trigger)
+	let mid = ['', '_*', '/*']
+	return join(map(extend(mid, map(filter(copy(mid), 'v:key != 1'),
+				\ "'/' . a:trigger . '*' . v:val")),
+				\ "'snippets/' . a:scope . v:val . '.snippet'"
+				\ . ". (v:key < 3 ? 's' : '')"))
+endfunction
+
+function! snipMate#SetByPath(dict, trigger, path, snippet, bang, snipversion)
+	let d = a:dict
+	if !has_key(d, a:trigger) || a:bang
+		let d[a:trigger] = {}
+	endif
+	let d[a:trigger][a:path] = [a:snippet, a:snipversion]
+endfunction
+
 " default triggers based on paths
 function! snipMate#DefaultPool(scopes, trigger, result)
-	let extra_scopes = []
-	for [f,opts] in items(snipMate#GetSnippetFiles(1, a:scopes, a:trigger))
-		let opts.name_prefix = matchstr(f, '\v/\zs.{-}\ze/snippets') . ' ' . opts.name_prefix
-		if opts.type == 'snippets'
-			let [snippets, new_scopes] = s:CachedSnips(f)
-			call extend(extra_scopes, new_scopes)
-			for [trigger, name, contents, snipversion] in snippets
-				if trigger =~ '\V\^' . escape(a:trigger, '\')
-					call snipMate#SetByPath(a:result, trigger,
-								\ opts.name_prefix . ' ' . name, [contents, snipversion])
-				endif
-			endfor
-		elseif opts.type == 'snippet'
-			call snipMate#SetByPath(a:result, opts.trigger,
-						\ opts.name_prefix . ' ' . opts.name,
-						\ [join(readfile(f), "\n"), get(g:snipMate, 'snippet_version', 0)])
-		else
-			throw "unexpected"
+	let scopes = s:AddScopeAliases(a:scopes)
+	let scopes_done = []
+	let rtp_save = &rtp
+	let &rtp = join(g:snipMate.snippet_dirs, ',')
+	let s:lookup_state = {}
+	let s:lookup_state.snips = []
+
+	while !empty(scopes)
+		let scope = remove(scopes, 0)
+		let s:lookup_state.scope = scope
+		let s:lookup_state.extends = []
+
+		exec 'runtime!' s:snippet_filenames(scope, escape(a:trigger, "*[]?{}`'$"))
+
+		call add(scopes_done, scope)
+		call extend(scopes, s:lookup_state.extends)
+		call filter(scopes, 'index(scopes_done, v:val) == -1')
+	endwhile
+
+	for [trigger, desc, contents, bang, snipversion] in s:lookup_state.snips
+		if trigger =~ '\V\^' . escape(a:trigger, '\')
+			call snipMate#SetByPath(a:result, trigger, desc, contents, bang, snipversion)
 		endif
 	endfor
 
-	if !empty(extra_scopes)
-		call snipMate#DefaultPool(extra_scopes, a:trigger, a:result)
-	endif
+	let &rtp = rtp_save
 endfunction
 
 " return a dict of snippets found in runtimepath matching trigger
