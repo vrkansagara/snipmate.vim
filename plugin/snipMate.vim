@@ -107,7 +107,7 @@ function! s:grab_visual()
 	let a_save = @a
 	try
 		normal! gv"ay
-		let b:snipmate_content_visual = @a
+		let b:snipmate_visual = @a
 	finally
 		let @a = a_save
 	endtry
