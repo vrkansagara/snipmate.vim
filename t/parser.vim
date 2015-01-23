@@ -104,4 +104,11 @@ describe 'snippet parser'
         Expect Parse("x\n$1x") == ['x', '', [1], 'x']
     end
 
+    it 'expands $VISUAL placeholders with any indents'
+        Expect Parse("x$VISUALx") == ['xtestvisualx']
+        let b:snipmate_visual = "  foo\nbar\n  baz"
+        setl noet
+        Expect Parse("\tx\n\t$VISUAL\nx") == ["\tx", "\t  foo", "\tbar", "\t  baz", "x"]
+    end
+
 end

@@ -11,6 +11,7 @@ function! s:new_parser(text)
     let ret.input = a:text
     let ret.len = strlen(ret.input)
     let ret.pos = -1
+    let ret.indent = 0
     let ret.value = []
     let ret.vars = {}
     call ret.advance()
@@ -123,9 +124,11 @@ function! s:parser_text(...) dict
         elseif self.next == "\n"
             call add(res, val)
             let val = ''
+            let self.indent = 0
             call self.advance()
-        elseif self.next == "\t" && &expandtab
-            let val .= repeat(' ', (&sts > 0) ? &sts : &sw)
+        elseif self.next == "\t"
+            let self.indent += 1
+            let val .= s:indent(1)
             call self.advance()
         else
             let val .= self.next
@@ -144,12 +147,13 @@ function! s:parser_parse(...) dict
             let var = self.var()
             if !empty(var)
                 if var[0] is# 'VISUAL'
-                    let add_to = s:visual_placeholder(var)
+                    let add_to = s:visual_placeholder(var, self.indent)
                     if !empty(ret) && type(ret[-1]) == type('')
-                        let ret[-1] .= add_to
+                        let ret[-1] .= add_to[0]
                     else
-                        call add(ret, add_to)
+                        call add(ret, add_to[0])
                     endif
+                    call extend(ret, add_to[1:-1])
                 elseif var[0] >= 0
                     call add(ret, var)
                     call self.add_var(var)
@@ -182,13 +186,24 @@ call extend(s:parser_proto, snipmate#util#add_methods(s:sfile(), 'parser',
             \ [ 'advance', 'same', 'id', 'add_var', 'var', 'varend',
             \ 'placeholder', 'subst', 'expr', 'text', 'parse' ]), 'error')
 
-function! s:visual_placeholder(var)
+function! s:indent(count)
+    if &expandtab
+        let shift = repeat(' ', (&sts > 0) ? &sts : &sw)
+    else
+        let shift = "\t"
+    endif
+    return repeat(shift, a:count)
+endfunction
+
+function! s:visual_placeholder(var, indent)
     let dict = get(a:var, 1, {})
     let pat = get(dict, 'pat', '')
     let sub = get(dict, 'sub', '')
     let flags = get(dict, 'flags', '')
-    let ret = substitute(get(b:, 'snipmate_visual', ''), pat, sub, flags)
-    return ret
+    let content = split(substitute(get(b:, 'snipmate_visual', ''), pat, sub, flags), "\n", 1)
+    let indent = s:indent(a:indent)
+    call map(content, '(v:key != 0) ? indent . v:val : v:val')
+    return content
 endfunction
 
 function! snipmate#parse#snippet(text)
