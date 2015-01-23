@@ -87,12 +87,12 @@ endfunction
 
 function! s:parser_subst() dict
     let ret = {}
-    if self.same('/')
-        let ret.flags = 'g'
-    endif
     let ret.pat = join(self.text('/', 1))
     if self.same('/')
-        let ret.sub =  join(self.text('}', 1))
+        let ret.sub = join(self.text('/}'))
+    endif
+    if self.same('/')
+        let ret.flags = join(self.text('}', 1))
     endif
     return ret
 endfunction
@@ -196,13 +196,19 @@ function! s:indent(count)
 endfunction
 
 function! s:visual_placeholder(var, indent)
-    let dict = get(a:var, 1, {})
-    let pat = get(dict, 'pat', '')
-    let sub = get(dict, 'sub', '')
-    let flags = get(dict, 'flags', '')
-    let content = split(substitute(get(b:, 'snipmate_visual', ''), pat, sub, flags), "\n", 1)
+    let arg = get(a:var, 1, {})
+    if type(arg) == type({})
+        let pat = get(arg, 'pat', '')
+        let sub = get(arg, 'sub', '')
+        let flags = get(arg, 'flags', '')
+        let content = split(substitute(get(b:, 'snipmate_visual', ''), pat, sub, flags), "\n", 1)
+    else
+        let content = split(get(b:, 'snipmate_visual', arg), "\n", 1)
+    endif
+
     let indent = s:indent(a:indent)
     call map(content, '(v:key != 0) ? indent . v:val : v:val')
+
     return content
 endfunction
 

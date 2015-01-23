@@ -42,8 +42,10 @@ describe 'snippet parser'
     it 'parses mirror substitutions ${n/pat/sub} as [n, {...}]'
         let expect = [[1, { 'pat' : 'abc', 'sub' : 'def' }]]
         Expect Parse('${1/abc/def}') == expect
+        let expect[0][1].flags = ''
+        Expect Parse('${1/abc/def/}') == expect
         let expect[0][1].flags = 'g'
-        Expect Parse('${1//abc/def}') == expect
+        Expect Parse('${1/abc/def/g}') == expect
     end
 
     it 'parses vars with placeholders as [id, placeholder] lists'
