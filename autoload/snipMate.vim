@@ -454,8 +454,15 @@ endf
 fun! snipMate#GetSnippetsForWordBelowCursor(word, exact)
 	" Setup lookups: '1.2.3' becomes [1.2.3] + [3, 2.3]
 	let parts = split(a:word, '\W\zs')
-	if len(parts) > 2
-		let parts = parts[-2:] " max 2 additional items, this might become a setting
+	" Since '\W\zs' results in splitting *after* a non-keyword character, the
+	" first \W stays connected to whatever's before it, so split it off
+	if len(parts[0]) > 1
+		let parts = [ parts[0][:-2], strpart(parts[0], len(parts[0]) - 1) ]
+					\ + parts[1:]
+	endif
+	" Only look at the last few possibilities. Too many can be slow.
+	if len(parts) > 5
+		let parts = parts[-5:]
 	endif
 	let lookups = [a:word]
 	let lookup = ''
@@ -465,11 +472,6 @@ fun! snipMate#GetSnippetsForWordBelowCursor(word, exact)
 			call add(lookups, lookup)
 		endif
 	endfor
-
-	" allow matching '.'
-	if a:word =~ '\.$'
-		call add(lookups, '.')
-	endif
 
 	" Remove empty lookup entries, but only if there are other nonempty lookups
 	if len(lookups) > 1
