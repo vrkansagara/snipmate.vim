@@ -132,6 +132,15 @@ function! s:state_update_mirrors(change) dict
 	let i = 0
 
 	for mirror in self.mirrors
+		for stop in values(filter(copy(self.stops), 'v:key != 0'))
+			if type(stop.placeholder) == type(0)
+				if mirror.line == stop.line && mirror.col > stop.col
+							\ && mirror.col < stop.col + stop.placeholder
+					let stop.placeholder += changeLen
+				endif
+			endif
+		endfor
+
 		call self.update(mirror, changeLen)
 		" Split the line into three parts: the mirror, what's before it, and
 		" what's after it. Then combine them using the new mirror string.
