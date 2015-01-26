@@ -357,7 +357,7 @@ function! snipMate#DefaultPool(scopes, trigger, result)
 		let s:lookup_state.scope = scope
 		let s:lookup_state.extends = []
 
-		exec 'runtime!' s:snippet_filenames(scope, escape(a:trigger, "*[]?{}`'$|"))
+		exec 'runtime!' s:snippet_filenames(scope, escape(a:trigger, "*[]?{}`'$|#%"))
 
 		call add(scopes_done, scope)
 		call extend(scopes, s:lookup_state.extends)
