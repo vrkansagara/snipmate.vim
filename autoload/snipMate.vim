@@ -329,9 +329,8 @@ endfunction
 
 function! s:snippet_filenames(scope, trigger)
 	let mid = ['', '_*', '/*']
-	return join(map(extend(mid, map(filter(copy(mid), 'v:key != 1'),
-				\ "'/' . a:trigger . '*' . v:val")),
-				\ "'snippets/' . a:scope . v:val . '.snippet'"
+	let mid += map(copy(mid[1:]), "'/' . a:trigger . '*' . v:val")
+	return join(map(mid, "'snippets/' . a:scope . v:val . '.snippet'"
 				\ . ". (v:key < 3 ? 's' : '')"))
 endfunction
 
