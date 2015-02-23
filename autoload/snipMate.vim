@@ -329,9 +329,9 @@ endfunction
 
 function! s:snippet_filenames(scope, trigger) abort
 	let mid = ['', '_*', '/*']
-	let mid += map(copy(mid[1:]), "'/' . a:trigger . '*' . v:val")
-	return join(map(mid, "'snippets/' . a:scope . v:val . '.snippet'"
-				\ . ". (v:key < 3 ? 's' : '')"))
+	let mid += map(copy(mid), "'/' . a:trigger . '*' . v:val")
+	call map(mid, "'snippets/' . a:scope . v:val . '.snippet'")
+	return join(map(mid[:2], 'v:val . "s"') + mid[3:])
 endfunction
 
 function! snipMate#SetByPath(dict, trigger, path, snippet, bang, snipversion) abort
