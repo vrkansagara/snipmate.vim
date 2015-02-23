@@ -455,7 +455,7 @@ fun! snipMate#GetSnippetsForWordBelowCursor(word, exact) abort
 	let parts = split(a:word, '\W\zs')
 	" Since '\W\zs' results in splitting *after* a non-keyword character, the
 	" first \W stays connected to whatever's before it, so split it off
-	if len(parts) > 1 && len(parts[0]) > 1
+	if !empty(parts) && parts[0] =~ '\W$'
 		let parts = [ parts[0][:-2], strpart(parts[0], len(parts[0]) - 1) ]
 					\ + parts[1:]
 	endif
