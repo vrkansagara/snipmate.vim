@@ -37,14 +37,14 @@ looking at the [vim-snippets][vim-snippets] repository.
         % git clone https://github.com/honza/vim-snippets.git
 
 * Using [Vundle][vundle], add the following to your `vimrc` then run
-  `:BundleInstall`
+  `:PluginInstall`
 
-        Bundle "MarcWeber/vim-addon-mw-utils"
-        Bundle "tomtom/tlib_vim"
-        Bundle "garbas/vim-snipmate"
+        Plugin "MarcWeber/vim-addon-mw-utils"
+        Plugin "tomtom/tlib_vim"
+        Plugin "garbas/vim-snipmate"
 
         " Optional:
-        Bundle "honza/vim-snippets"
+        Plugin "honza/vim-snippets"
 
 ## FAQ ##
 
