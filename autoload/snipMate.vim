@@ -423,26 +423,28 @@ fun! snipMate#RetabSnip() range abort
   endfor
 endf
 
-fun! snipMate#OpenSnippetFiles() abort
-  let dict = snipMate#GetSnippetFiles(0, snipMate#ScopesByFile(), '*')
-  " sort by files wether they exist - put existing files first
-  let exists = []
-  let notExists = []
-  for [file, v] in items(dict)
-	let v['file'] = file
-	if v['exists']
-	  call add(exists, v)
-	else
-	  call add(notExists, v)
-	endif
-  endfor
-  let all = exists + notExists
-  let show = map(copy(all),'(v:val["exists"] ? "exists:" : "does not exist yet:")." ".v:val["file"]')
-  let select = tlib#input#List('mi', 'select files to be opened in splits', show)
-  for idx in select
-	exec 'sp '.all[idx - 1]['file']
-  endfor
-endf
+function! snipMate#OpenSnippetFiles() abort
+	let files = []
+	let scopes_done = []
+	let exists = []
+	let notexists = []
+	for scope in s:AddScopeAliases(snipMate#ScopesByFile())
+		let files += split(s:snippet_filenames(scope, ''))
+	endfor
+	call filter(files, "v:val !~# '\\*'")
+	for path in split(&rtp, ',')
+		let fullpaths = map(copy(files), 'printf("%s/%s", path, v:val)')
+		let exists += filter(copy(fullpaths), 'filereadable(v:val)')
+		let notexists += map(filter(copy(fullpaths),
+					\ 'v:val =~# "\.snippets" && !filereadable(v:val)'),
+					\       '"does not exist: " . v:val')
+	endfor
+	let all = exists + notexists
+	let select = tlib#input#List('mi', 'select files to be opened in splits', all)
+	for idx in select
+		exec 'sp' all[idx]
+	endfor
+endfunction
 
 fun! snipMate#ScopesByFile() abort
 	" duplicates are removed in AddScopeAliases
