@@ -404,7 +404,7 @@ function! snipMate#OpenSnippetFiles() abort
 	let all = exists + notexists
 	let select = tlib#input#List('mi', 'select files to be opened in splits', all)
 	for idx in select
-		exec 'sp' all[idx]
+		exec 'sp' all[idx - 1]
 	endfor
 endfunction
 
