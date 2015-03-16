@@ -67,7 +67,7 @@ Try all of the following:
   path of the snippet file or the scope explicitly loaded.
 
 * Check if any snippets from your snippets file are available. This can be done
-  with the "show available snips` map, by default bound to `<C-R><Tab>` in
+  with the "show available snips" map, by default bound to `<C-R><Tab>` in
   insert mode.
 
 If all of the above check out, please open an issue stating your Vim version,
