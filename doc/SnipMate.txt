@@ -259,6 +259,10 @@ specified with a version line, e.g.: >
 
     version 1
 
+Specification of a version applies to the snippets following it. Multiple
+version specifications can appear in a single file to intermix version 0 and
+version 1 snippets.
+
 Comments can be made in .snippets files by starting a line with a # character.
 However these can't be used inside of snippet definitions: >
 
