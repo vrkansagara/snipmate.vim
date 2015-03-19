@@ -378,6 +378,9 @@ is expanded. Expressions are specified inside backticks: >
  snippet date
         `strftime("%Y-%m-%d")`
 
+If the expression results in any Vim error, the error will be displayed (or
+found in :messages) and the result of the expression will be the empty string.
+
 Filename([{expr}] [, {defaultText}])                     *SnipMate-Filename()*
 
 Since the current filename is used often in snippets, a default function
