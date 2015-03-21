@@ -430,17 +430,14 @@ SNIPPET SOURCES                                     *SnipMate-snippet-sources*
 
 SnipMate is configurable.
 
-plugin/SnipMate.vim assigns three important keys: >
+plugin/SnipMate.vim assigns a couple important keys: >
 
     " default implementation collecting snippets by handlers
     let g:SnipMate['get_snippets'] = SnipMate#GetSnippets
     " default handler:
     let g:SnipMateSources['default'] = SnipMate#DefaultPool
-    " default directories containing snippets:
-    let g:SnipMate['snippet_dirs']
-                \ = funcref#Function('return split(&runtimepath,",")')
 
-You can override all of those settings.
+You can override both of those settings.
 
 You can see that the default set of snippets is determined by Vim's 'rtp'.
 
