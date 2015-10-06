@@ -181,12 +181,10 @@ endfunction
 
 function! s:state_update(item, change_len) dict abort
 	let item = a:item
-	if exists('item.update_objects')
-		let to_update = item.update_objects
-	else
-		let to_update = self.find_update_objects(a:item)
-		let item.update_objects = to_update
+	if !exists('item.update_objects')
+		let item.update_objects = self.find_update_objects(a:item)
 	endif
+	let to_update = item.update_objects
 
 	for obj in to_update
 		let obj.col += a:change_len
