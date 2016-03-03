@@ -40,6 +40,7 @@ additional contributions from:
 * [redpill](https://github.com/redpill)
 * [rglassett](http://github.com/rglassett)
 * [robhudson](https://github.com/robhudson)
+* [shinymayhem](https://github.com/shinymayhem)
 * [Shraymonks](https://github.com/shraymonks)
 * [sickill](https://github.com/sickill)
 * [statik](https://github.com/statik)
