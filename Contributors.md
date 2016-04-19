@@ -14,6 +14,7 @@ additional contributions from:
 * [asymmetric](https://github.com/asymmetric)
 * [bpugh](https://github.com/bpugh)
 * [bruno-](https://github.com/bruno-)
+* [CharlesGueunet](https://github.com/CharlesGueunet)
 * [darkwise](https://github.com/darkwise)
 * [dreviejo](https://github.com/dreviejo)
 * [fish-face](https://github.com/fish-face)
