@@ -2,8 +2,8 @@ describe 'snippet parser'
 
     before
         function! Parse(snippet, ...)
-            let [snip, stops] = snipmate#parse#snippet(a:snippet)
-            return a:0 ? [snip, stops] : snip
+            let [snip, stops] = snipmate#parse#snippet(a:snippet, (a:0 ? a:1 : 1))
+            return (a:0 > 1 && a:2) ? [snip, stops] : snip
         endfunction
         let b:snipmate_visual = 'testvisual'
     end
@@ -22,7 +22,7 @@ describe 'snippet parser'
     end
 
     it 'gathers references to each instance of each stop id'
-        let [snip, b:stops] = Parse('x$1x${2:x$1x}x$1x${1/a/b}x$VISUALx', 1)
+        let [snip, b:stops] = Parse('x$1x${2:x$1x}x$1x${1/a/b}x$VISUALx', 1, 1)
         function! InstanceFound(list)
             return !empty(filter(copy(b:stops[a:list[0]].instances),
                         \ 'v:val is a:list'))
@@ -113,6 +113,23 @@ describe 'snippet parser'
         setl noet
         Expect Parse("\tx\n\t$VISUAL\nx") == [["\tx"], ["\t  foo"], ["\tbar"],
                     \ ["\t  baz"], ["x"]]
+    end
+
+    it 'determines which var with an id is the stop'
+        let [snip, stops] = Parse("$1$1$1", 0, 1)
+        Expect snip == [[[1, "", stops[1]], [1, {}], [1, {}]]]
+
+        let [snip, stops] = Parse("$1${1}$1", 0, 1)
+        Expect snip == [[[1, "", stops[1]], [1, {}], [1, {}]]]
+
+        let [snip, stops] = Parse("$1${1:}$1", 0, 1)
+        Expect snip == [[[1, {}], [1, "", stops[1]], [1, {}]]]
+
+    end
+
+    it 'picks the first of many possible stops'
+        let [snip, stops] = Parse("$1${1:foo}${1:bar}", 0, 1)
+        Expect snip == [[[1, {}], [1, "foo", stops[1]], [1, {}]]]
     end
 
 end
