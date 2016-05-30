@@ -48,6 +48,10 @@ describe 'snippet parser'
         Expect Parse('${1/abc/def/g}') == expect
     end
 
+    it 'reads patterns literally except for "\/"'
+        Expect Parse('${1/\a\/b/\c\/d\}}') == [[[1, { 'pat' : '\a/b', 'sub' : '\c/d}' }]]]
+    end
+
     it 'parses vars with placeholders as [id, placeholder] lists'
         Expect Parse('${1:abc}') == [[[1, 'abc']]]
     end
@@ -91,7 +95,6 @@ describe 'snippet parser'
         Expect Parse("x\\\nx") == [['xx']]
         Expect Parse('x\$1') == [['x$1']]
         Expect Parse('${1:\}}') == [[[1, '}']]]
-        Expect Parse('${1/\//\}}') == [[[1, { 'pat' : '/', 'sub' : '}' }]]]
         Expect Parse('`fnamemodify("\`.x", ":r")`') == [['`']]
         Expect Parse('\`x\`') == [['`x`']]
     end

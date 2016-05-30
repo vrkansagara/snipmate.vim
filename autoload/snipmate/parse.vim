@@ -90,14 +90,39 @@ endfunction
 
 function! s:parser_subst() dict abort
     let ret = {}
-    let ret.pat = join(self.string('/'), 1)
+    let ret.pat = self.pat()
     if self.same('/')
-        let ret.sub = join(self.string('/}'), 1)
+        let ret.sub = self.pat(1)
     endif
     if self.same('/')
-        let ret.flags = join(self.string('}'))
+        let ret.flags = self.pat(1)
     endif
     return ret
+endfunction
+
+function! s:parser_pat(...) dict abort
+    let val = ''
+
+    while self.pos < self.len
+        if self.same('\')
+            if self.next == '/'
+                let val .= '/'
+                call self.advance()
+            elseif a:0 && self.next == '}'
+                let val .= '}'
+                call self.advance()
+            else
+                let val .= '\'
+            endif
+        elseif self.next == '/' || a:0 && self.next == '}'
+            break
+        else
+            let val .= self.next
+            call self.advance()
+        endif
+    endwhile
+
+    return val
 endfunction
 
 function! s:parser_expr() dict abort
@@ -279,6 +304,6 @@ endfunction
 
 call extend(s:parser_proto, snipmate#util#add_methods(s:sfile(), 'parser',
             \ [ 'advance', 'same', 'id', 'add_var', 'var', 'varend',
-            \   'line', 'string', 'create_stubs',
+            \   'line', 'string', 'create_stubs', 'pat',
             \   'placeholder', 'subst', 'expr', 'text', 'parse',
             \ ]), 'error')
