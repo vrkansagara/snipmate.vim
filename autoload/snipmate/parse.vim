@@ -84,14 +84,15 @@ function! s:parser_varend() dict abort
 endfunction
 
 function! s:parser_placeholder() dict abort
-    return self.text('}')
+    let ret = self.text('}')
+    return empty(ret) ? [''] : ret
 endfunction
 
 function! s:parser_subst() dict abort
     let ret = {}
-    let ret.pat = join(self.string('/'))
+    let ret.pat = join(self.string('/'), 1)
     if self.same('/')
-        let ret.sub = join(self.string('/}'))
+        let ret.sub = join(self.string('/}'), 1)
     endif
     if self.same('/')
         let ret.flags = join(self.string('}'))
@@ -105,7 +106,7 @@ function! s:parser_expr() dict abort
     return snipmate#util#eval(str)
 endfunction
 
-function! s:parser_string(till) dict abort
+function! s:parser_string(till, ...) dict abort
     let res = []
     let val = ''
     let till = '\V\[' . escape(a:till, '\') . ']'
@@ -199,12 +200,6 @@ function! s:parser_parse() dict abort
     endwhile
 endfunction
 
-call extend(s:parser_proto, snipmate#util#add_methods(s:sfile(), 'parser',
-            \ [ 'advance', 'same', 'id', 'add_var', 'var', 'varend',
-            \   'line', 'string',
-            \   'placeholder', 'subst', 'expr', 'text', 'parse',
-            \ ]), 'error')
-
 function! s:indent(count) abort
     if &expandtab
         let shift = repeat(' ', snipmate#util#tabwidth())
@@ -231,9 +226,59 @@ function! s:visual_placeholder(var, indent) abort
     return content
 endfunction
 
-function! snipmate#parse#snippet(text) abort
+function! s:parser_create_stubs() dict abort
+
+    for [id, dict] in items(self.vars)
+        for i in dict.instances
+            if len(i) > 1 && type(i[1]) != type({})
+                if !has_key(dict, 'placeholder')
+                    let dict.placeholder = i[1:]
+                    call add(i, dict)
+                else
+                    unlet i[1:]
+                    call s:create_mirror_stub(i, dict)
+                endif
+            else
+                call s:create_mirror_stub(i, dict)
+            endif
+        endfor
+        if !has_key(dict, 'placeholder')
+            let dict.placeholder = []
+            let j = 0
+            while len(dict.instances[j]) > 2
+                let j += 1
+            endwhile
+            let oldstub = remove(dict.instances[j], 1, -1)[-1]
+            call add(dict.instances[j], '')
+            call add(dict.instances[j], dict)
+            call filter(dict.mirrors, 'v:val isnot oldstub')
+        endif
+        unlet dict.instances
+    endfor
+
+endfunction
+
+function! s:create_mirror_stub(mirror, dict)
+    let mirror = a:mirror
+    let dict = a:dict
+    let stub = get(mirror, 1, {})
+    call add(mirror, stub)
+    let dict.mirrors = get(dict, 'mirrors', [])
+    call add(dict.mirrors, stub)
+endfunction
+
+function! snipmate#parse#snippet(text, ...) abort
     let parser = s:new_parser(a:text)
     call parser.parse()
+    if !(a:0 && a:1)
+        call parser.create_stubs()
+    endif
     unlet! b:snipmate_visual
     return [parser.value, parser.vars]
 endfunction
+
+call extend(s:parser_proto, snipmate#util#add_methods(s:sfile(), 'parser',
+            \ [ 'advance', 'same', 'id', 'add_var', 'var', 'varend',
+            \   'line', 'string', 'create_stubs',
+            \   'placeholder', 'subst', 'expr', 'text', 'parse',
+            \ ]), 'error')
