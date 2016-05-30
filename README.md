@@ -98,6 +98,13 @@ does `:SnipMateLoadScope rails` when editing a Rails project for example.
 
 ## Release Notes ##
 
+### 0.89 - 2016-05-29 ###
+
+* Various regex updates to legacy parser
+* Addition of double bang syntax to completely remove a snippet from lookup
+* Group various SnipMate autocommands
+* Support setting 'shiftwidth' to 0
+
 ### 0.88 - 2015-04-04 ###
 
 * Implement simple caching
