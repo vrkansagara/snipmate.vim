@@ -6,7 +6,7 @@ endif
 try
 	call tlib#input#List('mi', '', [])
 catch /.*/
-	echoe "you're missing tlib. See install instructions at ".expand('<sfile>:h:h').'/README.md'
+	echoe "tlib is missing. See install instructions at ".expand('<sfile>:h:h').'/README.md'
 endtry
 
 fun! Filename(...) abort
