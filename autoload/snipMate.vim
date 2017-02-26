@@ -117,7 +117,14 @@ function! snipMate#sniplist_str(snippet, stops) abort
 		if type(item) == type('')
 			let str .= item
 		elseif type(item) == type([])
-			let str .= snipMate#placeholder_str(item[0], a:stops)
+			let placeholder = snipMate#placeholder_str(item[0], a:stops)
+			if len(item) > 1 && type(item[1]) == type({})
+				let placeholder = substitute(placeholder,
+							\ get(item[1], 'pat', ''),
+							\ get(item[1], 'sub', ''),
+							\ get(item[1], 'flags', ''))
+			endif
+			let str .= placeholder
 		endif
 
 		let pos += 1
