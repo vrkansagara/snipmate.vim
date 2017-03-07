@@ -180,6 +180,10 @@ function! s:parser_text(till) dict abort
             if !empty(var)
                 if var[0] is# 'VISUAL'
                     let lines = s:visual_placeholder(var, self.indent)
+                    " Remove trailing newline. See #245
+                    if lines[-1] == ''
+                        call remove(lines, -1)
+                    endif
                 elseif var[0] >= 0
                     call add(ret, var)
                     call self.add_var(var)
